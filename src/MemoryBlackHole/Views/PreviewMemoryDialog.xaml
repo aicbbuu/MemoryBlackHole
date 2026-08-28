@@ -25,9 +25,10 @@
             <TextBlock x:Name="TitleText" Text="查看记忆" FontSize="22" FontWeight="Light" Foreground="White"/>
             <TextBlock x:Name="MetaText" Grid.Row="1" Foreground="#9D8BFF" FontSize="12" Margin="0,8,0,16"/>
             <Grid Grid.Row="2">
-                <FlowDocumentScrollViewer x:Name="MarkdownViewer" Visibility="Collapsed"
-                                          VerticalScrollBarVisibility="Auto" BorderThickness="0"
-                                          Background="Transparent"/>
+                <RichTextBox x:Name="MarkdownViewer" Visibility="Collapsed"
+                          IsReadOnly="True" BorderThickness="0"
+                          Background="Transparent" Foreground="#E9ECF5"
+                          VerticalScrollBarVisibility="Auto" FontSize="14"/>
                 <StackPanel x:Name="LinkPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="🔗 链接记忆" FontSize="18" Foreground="White" HorizontalAlignment="Center"/>
                     <TextBlock x:Name="LinkUrlText" Foreground="#9D8BFF" TextWrapping="Wrap"

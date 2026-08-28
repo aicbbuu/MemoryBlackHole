@@ -33,7 +33,7 @@ namespace MemoryBlackHole.Views
                 // 文本：支持 Markdown 渲染
                 MarkdownViewer.Visibility = Visibility.Visible;
                 var doc = MarkdownHelper.ToFlowDocument(_item.Content ?? "");
-                ((FlowDocumentScrollViewer)MarkdownViewer).Document = doc;
+                MarkdownViewer.Document = doc;
                 return;
             }
 

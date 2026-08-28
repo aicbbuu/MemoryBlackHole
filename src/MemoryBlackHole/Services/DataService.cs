@@ -326,10 +326,64 @@ namespace MemoryBlackHole.Services
             cmd.ExecuteNonQuery();
         }
 
-        /// <summary>删除一条记忆（含媒体文件清理）。</summary>
-        public void Delete(long id)
+        /// <summary>软删除：移到回收站。</summary>
+        public void SoftDelete(long id)
         {
-            // 先查文件路径
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE Items SET IsDeleted=1, DeletedAt=$deleted WHERE Id=$id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$deleted", DateTime.Now.ToString("o"));
+            cmd.ExecuteNonQuery();
+        }
+
+        /// <summary>从回收站恢复。</summary>
+        public void Restore(long id)
+        {
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE Items SET IsDeleted=0, DeletedAt=NULL WHERE Id=$id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+
+        /// <summary>获取回收站中的记忆。</summary>
+        public List<MemoryItem> GetDeletedItems()
+        {
+            var result = new List<MemoryItem>();
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT * FROM Items WHERE IsDeleted=1 ORDER BY DeletedAt DESC LIMIT 200";
+            using var rd = cmd.ExecuteReader();
+            while (rd.Read())
+            {
+                result.Add(new MemoryItem
+                {
+                    Id = rd.GetInt64(rd.GetOrdinal("Id")),
+                    Type = rd.GetString(rd.GetOrdinal("Type")),
+                    Title = rd.IsDBNull(rd.GetOrdinal("Title")) ? null : rd.GetString(rd.GetOrdinal("Title")),
+                    Content = rd.IsDBNull(rd.GetOrdinal("Content")) ? null : rd.GetString(rd.GetOrdinal("Content")),
+                    FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
+                    FileData = rd.IsDBNull(rd.GetOrdinal("FileData")) ? null : (byte[])rd["FileData"],
+                    OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
+                    FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
+                    Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),
+                    Tags = rd.IsDBNull(rd.GetOrdinal("Tags")) ? null : rd.GetString(rd.GetOrdinal("Tags")),
+                    CreatedAt = DateTime.Parse(rd.GetString(rd.GetOrdinal("CreatedAt"))),
+                    IsFavorite = rd.GetInt64(rd.GetOrdinal("IsFavorite")) == 1,
+                    IsDeleted = true,
+                    DeletedAt = rd.IsDBNull(rd.GetOrdinal("DeletedAt")) ? null : DateTime.Parse(rd.GetString(rd.GetOrdinal("DeletedAt")))
+                });
+            }
+            return result;
+        }
+
+        /// <summary>永久删除一条记忆（含媒体文件清理）。</summary>
+        public void PermanentDelete(long id)
+        {
             string? filePath = null;
             using (var conn = new SqliteConnection(_connectionString))
             {
@@ -339,7 +393,6 @@ namespace MemoryBlackHole.Services
                 cmd.Parameters.AddWithValue("$id", id);
                 filePath = cmd.ExecuteScalar() as string;
             }
-
             using (var conn = new SqliteConnection(_connectionString))
             {
                 conn.Open();
@@ -348,14 +401,92 @@ namespace MemoryBlackHole.Services
                 cmd.Parameters.AddWithValue("$id", id);
                 cmd.ExecuteNonQuery();
             }
-
-            // 清理媒体文件（仅在 media 目录下的副本，不删原始文件）
             if (!string.IsNullOrEmpty(filePath) &&
                 filePath.StartsWith(_mediaDir, StringComparison.Ordinal) &&
                 File.Exists(filePath))
             {
-                try { File.Delete(filePath); } catch { /* 静默 */ }
+                try { File.Delete(filePath); } catch { }
             }
+        }
+
+        /// <summary>清空回收站。</summary>
+        public int EmptyRecycleBin()
+        {
+            var items = GetDeletedItems();
+            foreach (var item in items)
+                PermanentDelete(item.Id);
+            return items.Count;
+        }
+
+        /// <summary>导出所有记忆为 JSON 字符串。</summary>
+        public string ExportToJson()
+        {
+            var all = new List<MemoryItem>();
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT * FROM Items ORDER BY CreatedAt DESC";
+            using var rd = cmd.ExecuteReader();
+            while (rd.Read())
+            {
+                all.Add(new MemoryItem
+                {
+                    Id = rd.GetInt64(rd.GetOrdinal("Id")),
+                    Type = rd.GetString(rd.GetOrdinal("Type")),
+                    Title = rd.IsDBNull(rd.GetOrdinal("Title")) ? null : rd.GetString(rd.GetOrdinal("Title")),
+                    Content = rd.IsDBNull(rd.GetOrdinal("Content")) ? null : rd.GetString(rd.GetOrdinal("Content")),
+                    FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
+                    OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
+                    FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
+                    Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),
+                    Tags = rd.IsDBNull(rd.GetOrdinal("Tags")) ? null : rd.GetString(rd.GetOrdinal("Tags")),
+                    CreatedAt = DateTime.Parse(rd.GetString(rd.GetOrdinal("CreatedAt"))),
+                    IsFavorite = rd.GetInt64(rd.GetOrdinal("IsFavorite")) == 1,
+                    IsDeleted = rd.IsDBNull(rd.GetOrdinal("IsDeleted")) ? false : rd.GetInt64(rd.GetOrdinal("IsDeleted")) == 1,
+                    DeletedAt = rd.IsDBNull(rd.GetOrdinal("DeletedAt")) ? null : DateTime.Parse(rd.GetString(rd.GetOrdinal("DeletedAt")))
+                });
+            }
+            var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            return JsonSerializer.Serialize(all, options);
+        }
+
+        /// <summary>从 JSON 字符串导入记忆，返回导入数量。</summary>
+        public int ImportFromJson(string json)
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var items = JsonSerializer.Deserialize<List<MemoryItem>>(json, options);
+            if (items == null || items.Count == 0) return 0;
+            int count = 0;
+            foreach (var item in items)
+            {
+                using var conn = new SqliteConnection(_connectionString);
+                conn.Open();
+                using var chk = conn.CreateCommand();
+                chk.CommandText = "SELECT COUNT(*) FROM Items WHERE Id=$id";
+                chk.Parameters.AddWithValue("$id", item.Id);
+                if (Convert.ToInt32(chk.ExecuteScalar()) > 0) continue;
+
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"INSERT INTO Items(Id, Type, Title, Content, FilePath,
+                    OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite, IsDeleted, DeletedAt)
+                    VALUES ($id, $type, $title, $content, $file, $ofn, $fsize, $note, $tags, $created, $fav, $del, $delat);";
+                cmd.Parameters.AddWithValue("$id", item.Id);
+                cmd.Parameters.AddWithValue("$type", item.Type);
+                cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$file", (object?)item.FilePath ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
+                cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$tags", (object?)item.Tags ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$created", item.CreatedAt.ToString("o"));
+                cmd.Parameters.AddWithValue("$fav", item.IsFavorite ? 1 : 0);
+                cmd.Parameters.AddWithValue("$del", item.IsDeleted ? 1 : 0);
+                cmd.Parameters.AddWithValue("$delat", (object?)(item.DeletedAt?.ToString("o")) ?? DBNull.Value);
+                cmd.ExecuteNonQuery();
+                count++;
+            }
+            return count;
         }
 
         private void SaveSetting(string key, string value)
