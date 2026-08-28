@@ -546,7 +546,7 @@ namespace MemoryBlackHole.Views
                 var dialog = new NoticeDialog($"回收站（{items.Count} 条）",
                     $"共有 {items.Count} 条已删除的记忆。\n\n" +
                     string.Join("\n", items.Take(20).Select(i =>
-                        $"  {i.TypeName} · {i.DisplayText?.Length > 30 ? i.DisplayText[..30] + "…" : i.DisplayText ?? "(无标题)"}")) +
+                        $"  {i.TypeName} · {(i.DisplayText?.Length > 30 ? i.DisplayText[..30] + "…" : i.DisplayText ?? "(无标题)")}")) +
                     (items.Count > 20 ? $"\n  …以及 {items.Count - 20} 条" : "") +
                     "\n\n点击「确定」永久清空回收站。\n点击「取消」保留所有内容。")
                 { Owner = this };
