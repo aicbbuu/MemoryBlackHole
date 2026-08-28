@@ -12,6 +12,7 @@ namespace MemoryBlackHole.Views
         private readonly MemoryItem _item;
         private string? _tempPreview;
         public bool EditRequested { get; private set; }
+        public bool DeleteRequested { get; private set; }
 
         public PreviewMemoryDialog(MemoryItem item)
         {
@@ -87,6 +88,17 @@ namespace MemoryBlackHole.Views
         {
             EditRequested = true;
             Close();
+        }
+
+        private void Delete_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show($"确定删除这条{item.TypeName}记忆吗？\n此操作不可恢复。",
+                "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes)
+            {
+                DeleteRequested = true;
+                Close();
+            }
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

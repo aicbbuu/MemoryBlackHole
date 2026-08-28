@@ -6,6 +6,8 @@
         Title="记忆黑洞" Width="1280" Height="820" MinWidth="980" MinHeight="640"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
+        AllowDrop="True" Drop="Window_Drop"
+        PreviewKeyDown="Window_PreviewKeyDown"
         FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei" FontSize="14">
 
     <shell:WindowChrome.WindowChrome>
@@ -215,42 +217,80 @@
             </StackPanel>
         </Grid>
 
-        <!-- 背面：黑洞 + 搜索 + 搜索结果 -->
+        <!-- 背面：黑洞 + 搜索 + 标签侧栏 + 统计 -->
         <Grid x:Name="BackFace" Grid.Row="1" Visibility="Collapsed"
               Background="#090C16" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform><ScaleTransform x:Name="BackFlipScale" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
             <Canvas x:Name="BackCanvas" Background="Transparent"/>
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,42,0,0" Width="600">
-                <TextBlock Text="探索记忆" FontSize="25" FontWeight="Light"
-                           Foreground="#F3F5FF" HorizontalAlignment="Center"/>
-                <TextBlock Text="输入关键词，让黑洞把它吐出来" FontSize="13"
-                           Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,8,0,20"/>
-                <Border Height="54" CornerRadius="27" Background="#171D30"
-                        BorderBrush="#35405F" BorderThickness="1" Padding="20,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="⌕" FontSize="24" Foreground="#9D8BFF"
-                                   VerticalAlignment="Center" Margin="0,0,13,0"/>
-                        <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent" BorderThickness="0"
-                                 Foreground="#F4F6FF" CaretBrush="#A78BFA" FontSize="15"
-                                 VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
-                        <TextBlock Grid.Column="2" Text="Enter" FontSize="11" Foreground="#66718C"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-                <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
-                           Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
-                <ScrollViewer MaxHeight="330" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
-                                  Visibility="Collapsed" MouseDoubleClick="ResultsList_MouseDoubleClick"/>
-                </ScrollViewer>
-            </StackPanel>
-            <Button Content="← 返回黑洞" Style="{StaticResource PillButton}" HorizontalAlignment="Left"
-                    VerticalAlignment="Top" Margin="34,32,0,0" Click="BackToFront"/>
+            <Grid Margin="34,32,34,30">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="220"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <!-- 左侧：返回按钮 + 标签列表 + 统计 -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Top" Margin="0,6,16,0">
+                    <Button Content="← 返回黑洞" Style="{StaticResource PillButton}"
+                            HorizontalAlignment="Left" Click="BackToFront"/>
+                    <!-- 分隔 -->
+                    <Rectangle Height="1" Fill="#20263A" Margin="0,18,0,14"/>
+                    <TextBlock Text="📌 标签" FontSize="12" Foreground="#8991A8" Margin="0,0,0,8"/>
+                    <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="TagsList" FontSize="13">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="6,5" Margin="0,1" CornerRadius="8"
+                                            Background="#171D30" Cursor="Hand"
+                                            MouseLeftButtonDown="TagItem_MouseDown">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Key}" Foreground="#C5CBE0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, StringFormat='({0})'}"
+                                                       Foreground="#9D8BFF" FontSize="11" Margin="8,0,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <!-- 统计 -->
+                    <Rectangle Height="1" Fill="#20263A" Margin="0,10,0,10"/>
+                    <TextBlock x:Name="StatsText" Text="加载中…" FontSize="11"
+                               Foreground="#68748F" TextWrapping="Wrap"/>
+                </StackPanel>
+                <!-- 右侧：搜索 + 结果 -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                    <TextBlock Text="探索记忆" FontSize="25" FontWeight="Light"
+                               Foreground="#F3F5FF" HorizontalAlignment="Center"/>
+                    <TextBlock Text="输入关键词，让黑洞把它吐出来" FontSize="13"
+                               Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,8,0,20"/>
+                    <Border Height="54" CornerRadius="27" Background="#171D30"
+                            BorderBrush="#35405F" BorderThickness="1" Padding="20,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="⌕" FontSize="24" Foreground="#9D8BFF"
+                                       VerticalAlignment="Center" Margin="0,0,13,0"/>
+                            <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent" BorderThickness="0"
+                                     Foreground="#F4F6FF" CaretBrush="#A78BFA" FontSize="15"
+                                     VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
+                            <TextBlock Grid.Column="2" Text="Enter" FontSize="11" Foreground="#66718C"
+                                       VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                    <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
+                               Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
+                    <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
+                                      Visibility="Collapsed" MouseDoubleClick="ResultsList_MouseDoubleClick"/>
+                    </ScrollViewer>
+                </StackPanel>
+            </Grid>
         </Grid>
         </Grid>
     </Border>

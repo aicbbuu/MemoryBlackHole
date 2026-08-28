@@ -33,6 +33,50 @@ namespace MemoryBlackHole.Views
             Loaded += (_, _) => ContentBox.Focus();
         }
 
+        /// <summary>预选文件的构造函数（拖拽添加用）。</summary>
+        public AddItemDialog(string[] filePaths) : this()
+        {
+            if (filePaths == null || filePaths.Length == 0) return;
+
+            // 根据文件自动选择类型
+            var first = filePaths[0].ToLowerInvariant();
+            SelectedType = first switch
+            {
+                string f when f.EndsWith(".png") || f.EndsWith(".jpg") || f.EndsWith(".jpeg")
+                    || f.EndsWith(".gif") || f.EndsWith(".bmp") || f.EndsWith(".webp") => "Image",
+                string f when f.EndsWith(".mp4") || f.EndsWith(".mkv") || f.EndsWith(".avi")
+                    || f.EndsWith(".mov") || f.EndsWith(".webm") => "Video",
+                string f when f.EndsWith(".mp3") || f.EndsWith(".wav") || f.EndsWith(".flac")
+                    || f.EndsWith(".m4a") || f.EndsWith(".ogg") => "Audio",
+                _ => "File"
+            };
+            // 选中对应的 radio
+            foreach (var child in ((WrapPanel)RText.Parent).Children)
+            {
+                if (child is System.Windows.Controls.RadioButton rb && rb.Tag?.ToString() == SelectedType)
+                    rb.IsChecked = true;
+            }
+
+            // 填入文件
+            var displayItems = new List<string>();
+            long totalSize = 0;
+            foreach (var fp in filePaths)
+            {
+                var info = new FileInfo(fp);
+                FilePaths.Add(fp);
+                OriginalFileNames.Add(info.Name);
+                FileSizes.Add(info.Length);
+                totalSize += info.Length;
+                displayItems.Add($"{info.Name}  ({FormatSize(info.Length)})");
+            }
+
+            ContentBox.Visibility = Visibility.Collapsed;
+            FilePanel.Visibility = Visibility.Visible;
+            SelectedFileText.Text = $"拖入了 {filePaths.Length} 个文件（共 {FormatSize(totalSize)}）";
+            FileListBox.ItemsSource = displayItems;
+            FileListBox.Visibility = Visibility.Visible;
+        }
+
         private void Type_Changed(object sender, RoutedEventArgs e)
         {
             if (ContentBox == null || FilePanel == null || sender is not RadioButton radio) return;

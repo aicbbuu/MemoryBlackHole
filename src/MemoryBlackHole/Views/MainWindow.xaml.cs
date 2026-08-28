@@ -21,6 +21,7 @@ namespace MemoryBlackHole.Views
         private readonly SpaceCore _backSpace;
         private bool _flipping;
         private DateTime _lastFrame;
+        private string? _activeTag;
 
         public MainWindow()
         {
@@ -54,6 +55,41 @@ namespace MemoryBlackHole.Views
             if (WindowFrame.ActualWidth > 0 && WindowFrame.ActualHeight > 0)
                 WindowFrame.Clip = new RectangleGeometry(
                     new Rect(0, 0, WindowFrame.ActualWidth, WindowFrame.ActualHeight), 18, 18);
+        }
+
+        /// <summary>全局键盘快捷键。</summary>
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                switch (e.Key)
+                {
+                    case Key.N: // Ctrl+N: 新增记忆
+                        e.Handled = true;
+                        if (FrontFace.Visibility == Visibility.Visible)
+                            OpenAddDialog();
+                        else
+                        {
+                            new NoticeDialog("提示", "请在黑洞正面使用 Ctrl+N 新增记忆。")
+                                { Owner = this }.ShowDialog();
+                        }
+                        break;
+                    case Key.F: // Ctrl+F: 搜索框聚焦
+                        e.Handled = true;
+                        if (BackFace.Visibility == Visibility.Visible)
+                        {
+                            SearchBox?.Focus();
+                            SearchBox?.SelectAll();
+                        }
+                        else if (EnsureAccess())
+                            FlipToBack();
+                        break;
+                    case Key.W: // Ctrl+W: 关闭窗口
+                        e.Handled = true;
+                        Close();
+                        break;
+                }
+            }
         }
 
         private void OnRendering(object? sender, EventArgs e)
@@ -103,6 +139,47 @@ namespace MemoryBlackHole.Views
             {
                 new NoticeDialog("打开失败", $"无法打开浏览器。\n{ex.Message}") { Owner = this }.ShowDialog();
             }
+        }
+
+        /// <summary>拖拽文件到窗口 → 弹出新增对话框预填文件。</summary>
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            if (_service == null) return;
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
+            if (files == null || files.Length == 0) return;
+
+            // 拖入文本：按文字内容处理；拖入文件：弹出预填对话框
+            if (files.Length == 1 && string.IsNullOrEmpty(Path.GetExtension(files[0])))
+            {
+                // 无扩展名视为文本拖入，暂不支持
+                new NoticeDialog("拖入文件", "要添加文本记忆，请在正面点击✦按钮或使用 Ctrl+N。")
+                    { Owner = this }.ShowDialog();
+                return;
+            }
+
+            var dialog = new AddItemDialog(files) { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+
+            for (int i = 0; i < dialog.FilePaths.Count; i++)
+            {
+                string? storedPath = _service.StoreMedia(dialog.FilePaths[i]);
+                _service.Add(new MemoryItem
+                {
+                    Type = dialog.SelectedType,
+                    Title = dialog.OriginalFileNames[i],
+                    Content = dialog.OriginalFileNames[i],
+                    FilePath = storedPath ?? dialog.FilePaths[i],
+                    FileData = null,
+                    Note = null,
+                    Tags = dialog.Tags,
+                    OriginalFileName = dialog.OriginalFileNames[i],
+                    FileSizeBytes = dialog.FileSizes[i]
+                });
+            }
+
+            _frontSpace.PlayInward();
+            RefreshSearchResults();
         }
 
         private void FrontCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -233,7 +310,12 @@ namespace MemoryBlackHole.Views
                 if (item == null) return;
                 var preview = new PreviewMemoryDialog(item) { Owner = this };
                 preview.ShowDialog();
-                if (preview.EditRequested)
+                if (preview.DeleteRequested)
+                {
+                    _service?.Delete(item.Id);
+                    RefreshSearchResults();
+                }
+                else if (preview.EditRequested)
                 {
                     var edit = new EditMemoryDialog(item) { Owner = this };
                     if (edit.ShowDialog() == true)
@@ -251,6 +333,20 @@ namespace MemoryBlackHole.Views
                 RefreshSearchResults();
         }
 
+        /// <summary>点击标签→按标签过滤搜索。</summary>
+        private void TagItem_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is KeyValuePair<string, int> kv)
+                        {
+                            if (kv.Key == "全部标签")
+                                _activeTag = null;
+                            else
+                                _activeTag = kv.Key;
+                            SearchBox.Text = "";
+                            RefreshSearchResults();
+                        }
+        }
+
         private void RefreshSearchResults()
         {
             if (_service == null)
@@ -263,25 +359,65 @@ namespace MemoryBlackHole.Views
             try
             {
                 var keyword = SearchBox?.Text?.Trim() ?? "";
-                var results = _service.Search(keyword);
+
+                // 搜索（带标签过滤）
+                var results = _service.Search(keyword, tag: _activeTag);
+
                 ResultsList.ItemsSource = results;
-                bool hasKeyword = !string.IsNullOrWhiteSpace(keyword);
-                ResultsList.Visibility = hasKeyword && results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-                SearchStatus.Text = !hasKeyword
+                bool hasResults = results.Count > 0;
+                bool hasQuery = !string.IsNullOrWhiteSpace(keyword) || !string.IsNullOrEmpty(_activeTag);
+
+                ResultsList.Visibility = hasResults ? Visibility.Visible : Visibility.Collapsed;
+                SearchStatus.Text = !hasQuery
                     ? "请输入关键词开始搜索"
-                    : results.Count == 0 ? "没有找到这段记忆" : $"黑洞吐出了 {results.Count} 条记忆";
+                    : results.Count == 0
+                        ? "没有找到这段记忆"
+                        : $"黑洞吐出了 {results.Count} 条记忆" +
+                          (!string.IsNullOrEmpty(_activeTag) ? $"（标签：{_activeTag}）" : "");
 
                 if (results.Count > 0)
                 {
                     _backSpace.PlayOutward();
                     ResultsList.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(420)));
                 }
+
+                // 刷新标签侧栏
+                RefreshSidebar();
             }
             catch (Exception ex)
             {
                 SearchStatus.Text = "搜索暂时不可用：" + ex.Message;
                 ResultsList.Visibility = Visibility.Collapsed;
             }
+        }
+
+        /// <summary>刷新标签列表和统计面板。</summary>
+        private void RefreshSidebar()
+        {
+            if (_service == null) return;
+            try
+            {
+                // 标签（前面加「全部标签」项）
+                var tags = _service.GetTagCounts();
+                var allTags = new List<KeyValuePair<string, int>> { new("全部标签", 0) };
+                allTags.AddRange(tags);
+                TagsList.ItemsSource = allTags;
+
+                // 统计
+                var stats = _service.GetStats();
+                string sizeStr = stats.TotalSizeBytes switch
+                {
+                    < 1024L => $"{stats.TotalSizeBytes} B",
+                    < 1024L * 1024 => $"{stats.TotalSizeBytes / 1024.0:F1} KB",
+                    < 1024L * 1024 * 1024 => $"{stats.TotalSizeBytes / 1024.0 / 1024.0:F1} MB",
+                    _ => $"{stats.TotalSizeBytes / 1024.0 / 1024.0 / 1024.0:F1} GB"
+                };
+                StatsText.Text = $"📊 共 {stats.Total} 条记忆\n" +
+                                 $"📝 文本 {stats.Text}  ·  🖼 图片 {stats.Image}\n" +
+                                 $"🎵 音频 {stats.Audio}  ·  🎬 视频 {stats.Video}\n" +
+                                 $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
+            }
+            catch { /* 静默 */ }
         }
 
         /// <summary>现代化 2.5D 黑洞视觉：引力透镜式椭圆吸积盘、热光环和粒子轨道。</summary>
