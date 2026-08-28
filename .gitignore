@@ -1,0 +1,18 @@
+# Build output
+**/bin/
+**/obj/
+
+# Release output (certificate private keys must never be committed)
+/artifacts/publish/
+/artifacts/installer/
+/artifacts/certificate/
+
+# Local application data
+.memoryblackhole/
+**/.memoryblackhole/
+
+# IDE files
+.vs/
+.vscode/
+*.user
+*.suo

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MemoryBlackHole</RootNamespace>
+    <AssemblyName>MemoryBlackHole</AssemblyName>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <Authors>vicz</Authors>
+    <Company>vicz</Company>
+    <Product>记忆黑洞</Product>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <!-- x86 目标: 配上 RuntimeIdentifier 后 dotnet publish 出 x86 单文件 -->
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 本地数据库：SQLite + FTS5 全文索引 -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+  </ItemGroup>
+
+</Project>

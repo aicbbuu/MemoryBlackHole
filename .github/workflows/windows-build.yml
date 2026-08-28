@@ -1,0 +1,115 @@
+name: Windows Build & Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/MemoryBlackHole/MemoryBlackHole.csproj
+
+      - name: Publish win-x86 self-contained single-file EXE
+        run: |
+          dotnet publish src/MemoryBlackHole/MemoryBlackHole.csproj `
+            -c Release -r win-x86 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None -p:DebugSymbols=false `
+            -o artifacts/publish/win-x86
+        shell: pwsh
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemoryBlackHole-win-x86-exe
+          path: artifacts/publish/win-x86/MemoryBlackHole.exe
+          if-no-files-found: error
+
+      # 代码签名（仅打 tag，且 Secrets 已配置时才执行；找不到证书/工具则跳过，不阻塞发布）
+      - name: Code-sign EXE (self-signed)
+        if: startsWith(github.ref, 'refs/tags/') && env.PFX_BASE64 != '' && env.PFX_PASSWORD != ''
+        env:
+          PFX_BASE64: ${{ secrets.MEMORYBLACKHOLE_PFX }}
+          PFX_PASSWORD: ${{ secrets.MEMORYBLACKHOLE_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pfx = "$env:RUNNER_TEMP\signing.pfx"
+          $cert = "$env:RUNNER_TEMP\signing.cer"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_BASE64))
+
+          # 找 signtool
+          $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+          if (-not $signtool) {
+            $kits = @("${env:ProgramFiles(x86)}\Windows Kits\10\bin", "$env:ProgramFiles\Windows Kits\10\bin") | Where-Object { $_ -and (Test-Path $_) }
+            $signtool = Get-ChildItem $kits -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match 'x64\\signtool\.exe$' } |
+              Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $signtool) { Write-Warning 'signtool not found - skipping signature'; exit 0 }
+
+          $target = 'artifacts/publish/win-x86/MemoryBlackHole.exe'
+          Write-Host "Signing $target"
+          & $signtool sign /fd SHA256 /f $pfx /p $env:PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $target
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Timestamp failed, signing without timestamp'
+            & $signtool sign /fd SHA256 /f $pfx /p $env:PFX_PASSWORD $target
+            if ($LASTEXITCODE -ne 0) { Write-Warning 'Signing failed - continuing with unsigned EXE'; exit 0 }
+          }
+          & $signtool verify /pa $target *> $null
+          if ($LASTEXITCODE -ne 0) { Write-Warning 'Verify reports not-trusted (expected for self-signed) - signature is present' }
+          Write-Host 'Signed EXE'
+          exit 0
+        shell: pwsh
+
+      # 仅在打 tag 或手动触发时构建安装包 + Release
+      - name: Install Inno Setup
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: choco install innosetup -y
+
+      - name: Compile Inno Setup installer
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: |
+          $iscc = (Get-Command ISCC.exe).Source
+          & $iscc packaging/MemoryBlackHole.iss
+        shell: pwsh
+
+      - name: Upload installer artifact
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MemoryBlackHole-win-x86-installer
+          path: artifacts/installer/*.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          gh release create $tag `
+            artifacts/publish/win-x86/MemoryBlackHole.exe `
+            artifacts/installer/MemoryBlackHole-Setup-*-win-x86.exe `
+            --title $tag `
+            --generate-notes
+        shell: pwsh

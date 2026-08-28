@@ -1,0 +1,257 @@
+<Window x:Class="MemoryBlackHole.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:models="clr-namespace:MemoryBlackHole.Models"
+        Title="记忆黑洞" Width="1280" Height="820" MinWidth="980" MinHeight="640"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
+        AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
+        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei" FontSize="14">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0"
+                            CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#080A12" Offset="0"/>
+            <GradientStop Color="#11162A" Offset="0.55"/>
+            <GradientStop Color="#070910" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#BBA7FF" Offset="0"/>
+            <GradientStop Color="#7564F7" Offset="0.48"/>
+            <GradientStop Color="#39D7FF" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="MutedBrush" Color="#8991A8"/>
+        <SolidColorBrush x:Key="LineBrush" Color="#293149"/>
+
+        <Style x:Key="PillButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#F5F7FF"/>
+            <Setter Property="Background" Value="#20263A"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="PillBorder" Background="{TemplateBinding Background}" CornerRadius="18" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PillBorder" Property="Background" Value="#303B5D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WindowButton" TargetType="Button">
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#B8C1D8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#222A42"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="StarButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="#1C2340"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#554BBA"/>
+            <Setter Property="Width" Value="62"/>
+            <Setter Property="Height" Value="62"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="StarBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="31">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="StarBorder" Property="Background" Value="#303A66"/>
+                                <Setter TargetName="StarBorder" Property="BorderBrush" Value="#A99BFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CircleIconButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="#1A2133"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#35405F"/>
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="CircleBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="17">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CircleBorder" Property="Background" Value="#303A66"/>
+                                <Setter TargetName="CircleBorder" Property="BorderBrush" Value="#A99BFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="ResultTemplate" DataType="{x:Type models:MemoryItem}">
+            <Border Background="#171D30" BorderBrush="#2C3654" BorderThickness="1"
+                    CornerRadius="12" Padding="16" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Width="38" Height="38" CornerRadius="19" Background="#6D5DF7">
+                        <TextBlock Text="✦" FontSize="18" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="12,0,16,0">
+                        <TextBlock Text="{Binding DisplayText}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"/>
+                        <TextBlock Text="{Binding Content}" FontSize="13" Foreground="#AEB6CD"
+                                   TextWrapping="Wrap" MaxHeight="42" Margin="0,5,0,0"/>
+                        <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,8,0,0"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="{Binding TypeName}" FontSize="11"
+                               Foreground="#9D8BFF" VerticalAlignment="Top"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border x:Name="WindowFrame" Background="{StaticResource WindowBackground}" CornerRadius="18"
+            ClipToBounds="True" SizeChanged="WindowFrame_SizeChanged">
+        <Grid Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="52"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 自定义标题栏 -->
+        <Grid Grid.Row="0" Background="#0C101D" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                <Grid Width="34" Height="34">
+                    <Ellipse Fill="{StaticResource AccentGradient}"/>
+                    <Ellipse Width="22" Height="22" Fill="#080A12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Ellipse Width="9" Height="9" Fill="#FFE7A6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Ellipse Width="29" Height="8" Stroke="#FFF0C2" StrokeThickness="1.4" Opacity="0.85"
+                             HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform><RotateTransform Angle="-18"/></Ellipse.RenderTransform>
+                    </Ellipse>
+                </Grid>
+                <TextBlock Text="记忆黑洞" FontSize="15" FontWeight="SemiBold"
+                           Foreground="#F5F7FF" Margin="10,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="LOCAL MEMORY VAULT" FontSize="10"
+                       Foreground="#59647C" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
+                <Button Content="—" Style="{StaticResource WindowButton}" Click="Minimize_Click"/>
+                <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource WindowButton}" Click="Maximize_Click"/>
+                <Button Content="×" Style="{StaticResource WindowButton}" Click="Close_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 正面：沉浸式黑洞入口 -->
+        <Grid x:Name="FrontFace" Grid.Row="1" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform><ScaleTransform x:Name="FlipScale" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
+            <Canvas x:Name="FrontCanvas" Background="Transparent"
+                    MouseLeftButtonDown="FrontCanvas_MouseLeftButtonDown"/>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,42">
+                <TextBlock Text="把记忆交给黑洞" FontSize="28" FontWeight="Light"
+                           Foreground="#F3F5FF" HorizontalAlignment="Center"/>
+                <TextBlock Text="一切留在本地 · 一切都能找回" FontSize="13"
+                           Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,9,0,0"/>
+                <TextBlock Text="双击黑洞探索记忆空间" FontSize="11"
+                           Foreground="#56617B" HorizontalAlignment="Center" Margin="0,16,0,0"/>
+            </StackPanel>
+            <Button Style="{StaticResource StarButton}" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="54,40,0,0" Click="FrontAdd_Click" ToolTip="新增记忆">
+                <TextBlock Text="✦" FontSize="28" Foreground="#F5D77C"/>
+            </Button>
+            <TextBlock Text="新增记忆" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       Margin="66,108,0,0" Foreground="#8E97B2" FontSize="11"/>
+
+            <!-- 右下角 GitHub 问号图标 + 版本号 -->
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,26,26" Orientation="Horizontal">
+                <TextBlock x:Name="VersionText" Text="v1.0.0" FontSize="10" Foreground="#4A5570"
+                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <Button Style="{StaticResource CircleIconButton}" Click="OpenGitHub_Click" ToolTip="项目主页">
+                    <TextBlock Text="?" FontSize="16" FontWeight="Bold" Foreground="#9AA3BA"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- 背面：黑洞 + 搜索 + 搜索结果 -->
+        <Grid x:Name="BackFace" Grid.Row="1" Visibility="Collapsed"
+              Background="#090C16" RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform><ScaleTransform x:Name="BackFlipScale" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
+            <Canvas x:Name="BackCanvas" Background="Transparent"/>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,42,0,0" Width="600">
+                <TextBlock Text="探索记忆" FontSize="25" FontWeight="Light"
+                           Foreground="#F3F5FF" HorizontalAlignment="Center"/>
+                <TextBlock Text="输入关键词，让黑洞把它吐出来" FontSize="13"
+                           Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,8,0,20"/>
+                <Border Height="54" CornerRadius="27" Background="#171D30"
+                        BorderBrush="#35405F" BorderThickness="1" Padding="20,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="⌕" FontSize="24" Foreground="#9D8BFF"
+                                   VerticalAlignment="Center" Margin="0,0,13,0"/>
+                        <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent" BorderThickness="0"
+                                 Foreground="#F4F6FF" CaretBrush="#A78BFA" FontSize="15"
+                                 VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
+                        <TextBlock Grid.Column="2" Text="Enter" FontSize="11" Foreground="#66718C"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
+                           Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
+                <ScrollViewer MaxHeight="330" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
+                                  Visibility="Collapsed" MouseDoubleClick="ResultsList_MouseDoubleClick"/>
+                </ScrollViewer>
+            </StackPanel>
+            <Button Content="← 返回黑洞" Style="{StaticResource PillButton}" HorizontalAlignment="Left"
+                    VerticalAlignment="Top" Margin="34,32,0,0" Click="BackToFront"/>
+        </Grid>
+        </Grid>
+    </Border>
+</Window>

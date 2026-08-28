@@ -1,0 +1,49 @@
+<Window x:Class="MemoryBlackHole.Views.PreviewMemoryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="查看记忆" Width="650" Height="520" WindowStartupLocation="CenterOwner"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Border BorderBrush="#303B59" BorderThickness="0" CornerRadius="16" Background="#0F1424" Padding="26">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <TextBlock x:Name="TitleText" Text="查看记忆" FontSize="22" FontWeight="Light" Foreground="White"/>
+            <TextBlock x:Name="MetaText" Grid.Row="1" Foreground="#9D8BFF" FontSize="12" Margin="0,8,0,16"/>
+            <Grid Grid.Row="2">
+                <ScrollViewer x:Name="TextViewer" VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="TextContent" Foreground="#E9ECF5" FontSize="15" TextWrapping="Wrap"/>
+                </ScrollViewer>
+                <Image x:Name="ImagePreview" Stretch="Uniform" Visibility="Collapsed"/>
+                <MediaElement x:Name="MediaPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                              Visibility="Collapsed" Stretch="Uniform"/>
+                <StackPanel x:Name="FileInfoPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="这是一个文件记忆" FontSize="18" Foreground="White" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="FileInfoText" Foreground="#9AA3BA" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0"/>
+                    <Button x:Name="OpenFileButton" Content="打开文件" Width="110" Margin="0,18,0,0" Click="OpenFile_Click"
+                            Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
+                </StackPanel>
+            </Grid>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <Button Content="编辑" Width="84" Margin="0,0,10,0" Click="Edit_Click"
+                        Background="Transparent" Foreground="#C5CBE0" BorderBrush="#34405D" BorderThickness="1" Padding="10,8"/>
+                <Button Content="关闭" Width="84" Click="Close_Click"
+                        Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

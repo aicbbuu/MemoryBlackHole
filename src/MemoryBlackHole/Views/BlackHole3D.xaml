@@ -1,0 +1,107 @@
+<UserControl x:Class="MemoryBlackHole.Views.BlackHole3D"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      风格化真 3D 黑洞。
+      吸积盘使用有厚度的 Torus 环面，不是平面圆环；
+      旋转和光效由 BlackHole3D.xaml.cs 驱动。
+    -->
+    <Grid Background="#02030A">
+        <Ellipse Width="1000" Height="1000" Opacity="0.12">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#24104F" Offset="0"/>
+                    <GradientStop Color="#07132B" Offset="0.5"/>
+                    <GradientStop Color="#000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+        </Ellipse>
+
+        <Viewport3D x:Name="vp" ClipToBounds="True">
+            <Viewport3D.Camera>
+                <!-- 斜向观察，能看出环面的厚度和阴影 -->
+                <PerspectiveCamera Position="0,3.8,7.2"
+                                   LookDirection="0,-1.15,-6.6"
+                                   UpDirection="0,1,0"
+                                   FieldOfView="52"
+                                   NearPlaneDistance="0.1"
+                                   FarPlaneDistance="80"/>
+            </Viewport3D.Camera>
+
+            <ModelVisual3D>
+                <ModelVisual3D.Content>
+                    <AmbientLight Color="#303545"/>
+                </ModelVisual3D.Content>
+            </ModelVisual3D>
+            <ModelVisual3D>
+                <ModelVisual3D.Content>
+                    <DirectionalLight Color="#FFFFFF" Direction="-1,-2,-2"/>
+                </ModelVisual3D.Content>
+            </ModelVisual3D>
+            <ModelVisual3D>
+                <ModelVisual3D.Content>
+                    <PointLight Color="#FF7A2F" Position="-3,2,4" Range="14" ConstantAttenuation="0.35" LinearAttenuation="0.08" QuadraticAttenuation="0.015"/>
+                </ModelVisual3D.Content>
+            </ModelVisual3D>
+
+            <!-- 整体旋转组：黑洞球、主吸积盘、外层光环和光点一起运动 -->
+            <ModelVisual3D>
+                <ModelVisual3D.Content>
+                    <Model3DGroup x:Name="holeGroup">
+                        <!-- 黑洞事件视界 -->
+                        <GeometryModel3D x:Name="holeModel">
+                            <GeometryModel3D.Material>
+                                <MaterialGroup>
+                                    <DiffuseMaterial Brush="#000000"/>
+                                    <EmissiveMaterial Brush="#010107"/>
+                                </MaterialGroup>
+                            </GeometryModel3D.Material>
+                        </GeometryModel3D>
+
+                        <!-- 主吸积盘：橙红色厚环面 -->
+                        <GeometryModel3D x:Name="diskModel">
+                            <GeometryModel3D.Material>
+                                <MaterialGroup>
+                                    <DiffuseMaterial Brush="#D83B18"/>
+                                    <EmissiveMaterial Brush="#8E160A"/>
+                                </MaterialGroup>
+                            </GeometryModel3D.Material>
+                            <GeometryModel3D.BackMaterial>
+                                <MaterialGroup>
+                                    <DiffuseMaterial Brush="#6F18D4"/>
+                                    <EmissiveMaterial Brush="#3D0875"/>
+                                </MaterialGroup>
+                            </GeometryModel3D.BackMaterial>
+                        </GeometryModel3D>
+
+                        <!-- 内层高亮环 -->
+                        <GeometryModel3D x:Name="innerDiskModel">
+                            <GeometryModel3D.Material>
+                                <MaterialGroup>
+                                    <DiffuseMaterial Brush="#FFB52E"/>
+                                    <EmissiveMaterial Brush="#FF5A12"/>
+                                </MaterialGroup>
+                            </GeometryModel3D.Material>
+                            <GeometryModel3D.BackMaterial>
+                                <EmissiveMaterial Brush="#00C6FF"/>
+                            </GeometryModel3D.BackMaterial>
+                        </GeometryModel3D>
+
+                        <!-- 外层冷色光环 -->
+                        <GeometryModel3D x:Name="outerDiskModel">
+                            <GeometryModel3D.Material>
+                                <EmissiveMaterial Brush="#5B21FF"/>
+                            </GeometryModel3D.Material>
+                            <GeometryModel3D.BackMaterial>
+                                <EmissiveMaterial Brush="#00B8FF"/>
+                            </GeometryModel3D.BackMaterial>
+                        </GeometryModel3D>
+
+                        <!-- 环面上的发光粒子 -->
+                        <Model3DGroup x:Name="sparksGroup"/>
+                    </Model3DGroup>
+                </ModelVisual3D.Content>
+            </ModelVisual3D>
+        </Viewport3D>
+    </Grid>
+</UserControl>

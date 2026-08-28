@@ -1,0 +1,126 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using Microsoft.Win32;
+
+namespace MemoryBlackHole.Views
+{
+    public partial class AddItemDialog : Window
+    {
+        public string ContentText { get; private set; } = "";
+        public string? ItemTitle { get; private set; }
+        public string? Note { get; private set; }
+        public string? Tags { get; private set; }
+        public string SelectedType { get; private set; } = "Text";
+
+        /// <summary>多文件支持：选中的文件路径列表。</summary>
+        public List<string> FilePaths { get; private set; } = new();
+        /// <summary>多文件支持：原始文件名列表。</summary>
+        public List<string> OriginalFileNames { get; private set; } = new();
+        /// <summary>多文件支持：文件二进制数据列表（超限为 null）。</summary>
+        public List<byte[]?> FileDataList { get; private set; } = new();
+        /// <summary>多文件支持：文件大小列表。</summary>
+        public List<long> FileSizes { get; private set; } = new();
+
+        public AddItemDialog()
+        {
+            InitializeComponent();
+            Loaded += (_, _) => ContentBox.Focus();
+        }
+
+        private void Type_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ContentBox == null || FilePanel == null || sender is not RadioButton radio) return;
+            SelectedType = radio.Tag?.ToString() ?? "Text";
+            bool text = SelectedType == "Text";
+            ContentBox.Visibility = text ? Visibility.Visible : Visibility.Collapsed;
+            FilePanel.Visibility = text ? Visibility.Collapsed : Visibility.Visible;
+            // 不自动打开文件选择窗口，必须由用户点击按钮。
+        }
+
+        private void ChooseFile_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "选择要保存的文件",
+                Multiselect = true, // 启用多选！
+                Filter = SelectedType switch
+                {
+                    "Image" => "图片文件|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp|所有文件|*.*",
+                    "Video" => "视频文件|*.mp4;*.mkv;*.avi;*.mov;*.webm|所有文件|*.*",
+                    "Audio" => "音频文件|*.mp3;*.wav;*.flac;*.m4a;*.ogg|所有文件|*.*",
+                    _ => "所有文件|*.*"
+                }
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            // 清空之前的选中
+            FilePaths.Clear();
+            OriginalFileNames.Clear();
+            FileDataList.Clear();
+            FileSizes.Clear();
+
+            var displayItems = new List<string>();
+
+            foreach (var fileName in dialog.FileNames)
+            {
+                var info = new FileInfo(fileName);
+                FilePaths.Add(fileName);
+                OriginalFileNames.Add(info.Name);
+                FileSizes.Add(info.Length);
+
+                if (info.Length <= 200L * 1024 * 1024)
+                    FileDataList.Add(File.ReadAllBytes(info.FullName));
+                else
+                    FileDataList.Add(null);
+
+                string sizeStr = FormatSize(info.Length);
+                string status = info.Length <= 200L * 1024 * 1024
+                    ? "✓ 存入数据库"
+                    : "⚠ 仅保存路径（超 200 MB）";
+                displayItems.Add($"{info.Name}  ({sizeStr})  {status}");
+            }
+
+            // 更新 UI
+            int count = displayItems.Count;
+            SelectedFileText.Text = $"已选择 {count} 个文件";
+            FileListBox.ItemsSource = displayItems;
+            FileListBox.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static string FormatSize(long bytes)
+        {
+            string[] units = { "B", "KB", "MB", "GB" };
+            double value = bytes; int unit = 0;
+            while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
+            return $"{value:0.##} {units[unit]}";
+        }
+
+        private void Confirm_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedType == "Text")
+            {
+                ContentText = ContentBox.Text?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(ContentText))
+                {
+                    MessageBox.Show("请输入文本内容", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
+            else if (FilePaths.Count == 0)
+            {
+                MessageBox.Show("请先点击“选择本地文件”", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // 使用第一个文件的原始文件名作为对话框标题
+            ItemTitle = OriginalFileNames.Count > 0 ? OriginalFileNames[0] : null;
+            Tags = string.IsNullOrWhiteSpace(TagsBox.Text) ? null : TagsBox.Text.Trim();
+            DialogResult = true;
+        }
+
+        private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    }
+}
