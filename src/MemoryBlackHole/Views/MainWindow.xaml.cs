@@ -12,7 +12,6 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using Hardcodet.Wpf.TaskbarNotification;
 using MemoryBlackHole.Models;
 using MemoryBlackHole.Services;
 
@@ -26,8 +25,6 @@ namespace MemoryBlackHole.Views
         private bool _flipping;
         private DateTime _lastFrame;
         private string? _activeTag;
-        private bool _isDarkMode = true;
-        private TaskbarIcon? _trayIcon;
         private Color _accentColor = Color.FromRgb(0x6D, 0x5D, 0xF7);
 
         public MainWindow()
@@ -47,12 +44,6 @@ namespace MemoryBlackHole.Views
 
             Loaded += (_, _) =>
             {
-                // Mica 毛玻璃效果
-                WindowEffects.EnableMica(this, _isDarkMode);
-
-                // 系统托盘
-                SetupTrayIcon();
-
                 // 从程序集自动读取版本号
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
                 if (ver != null)
@@ -63,7 +54,6 @@ namespace MemoryBlackHole.Views
             Closed += (_, _) =>
             {
                 CompositionTarget.Rendering -= OnRendering;
-                _trayIcon?.Dispose();
             };
         }
 
@@ -141,44 +131,7 @@ namespace MemoryBlackHole.Views
             MaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
         }
 
-        private void Close_Click(object sender, RoutedEventArgs e)
-        {
-            // 关闭窗口时最小化到托盘
-            Hide();
-            if (_trayIcon != null)
-                _trayIcon.ShowBalloonTip("记忆黑洞", "程序仍在后台运行，双击托盘图标恢复。", BalloonIcon.Info);
-        }
-
-        /// <summary>切换亮暗主题。</summary>
-        private void ThemeToggle_Click(object sender, RoutedEventArgs e)
-        {
-            _isDarkMode = !_isDarkMode;
-            ThemeToggleButton.Content = _isDarkMode ? "☀" : "☾";
-            WindowEffects.SetDarkMode(this, _isDarkMode);
-
-            // 切换资源字典
-            var oldDict = Resources.MergedDictionaries.FirstOrDefault(d =>
-                d.Source != null && d.Source.OriginalString.Contains("LightTheme"));
-            if (_isDarkMode)
-            {
-                // 切回暗色：移除 LightTheme
-                if (oldDict != null) Resources.MergedDictionaries.Remove(oldDict);
-            }
-            else
-            {
-                // 切到亮色：添加 LightTheme
-                if (oldDict == null)
-                {
-                    var newDict = new ResourceDictionary
-                    {
-                        Source = new Uri("/MemoryBlackHole;component/Themes/LightTheme.xaml", UriKind.Relative)
-                    };
-                    Resources.MergedDictionaries.Add(newDict);
-                    // 调整窗口背景透明度
-                    Background = new SolidColorBrush(Color.FromArgb(240, 240, 245, 252));
-                }
-            }
-        }
+        private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
         private void OpenGitHub_Click(object sender, RoutedEventArgs e)
         {
@@ -483,51 +436,6 @@ namespace MemoryBlackHole.Views
                                  $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
             }
             catch { /* 静默 */ }
-        }
-
-        /// <summary>设置系统托盘。</summary>
-        private void SetupTrayIcon()
-        {
-            try
-            {
-                _trayIcon = new TaskbarIcon
-                {
-                    ToolTipText = "记忆黑洞",
-                    IconSource = new System.Windows.Media.Imaging.BitmapImage(
-                        new Uri("pack://application:,,,/Assets/AppIcon.ico", UriKind.Absolute)),
-                    Visibility = Visibility.Visible
-                };
-
-                _trayIcon.TrayMouseDoubleClick += (_, _) =>
-                {
-                    Show();
-                    WindowState = WindowState.Normal;
-                    Activate();
-                };
-
-                _trayIcon.ContextMenu = new ContextMenu();
-                _trayIcon.ContextMenu.Items.Add(new MenuItem
-                {
-                    Header = "显示窗口",
-                    Command = new RelayCommand(() =>
-                    {
-                        Show();
-                        WindowState = WindowState.Normal;
-                        Activate();
-                    })
-                });
-                _trayIcon.ContextMenu.Items.Add(new MenuItem
-                {
-                    Header = "退出",
-                    Command = new RelayCommand(() =>
-                    {
-                        _trayIcon?.Dispose();
-                        _trayIcon = null;
-                        Application.Current.Shutdown();
-                    })
-                });
-            }
-            catch { /* 托盘初始化失败时静默 */ }
         }
 
         /// <summary>打开回收站。</summary>

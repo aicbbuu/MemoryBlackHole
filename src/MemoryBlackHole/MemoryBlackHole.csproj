@@ -8,10 +8,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MemoryBlackHole</RootNamespace>
     <AssemblyName>MemoryBlackHole</AssemblyName>
-    <Version>2.0.0</Version>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
-    <FileVersion>2.0.0.0</FileVersion>
-    <InformationalVersion>2.0.0</InformationalVersion>
+    <Version>2.0.1</Version>
+    <AssemblyVersion>2.0.1.0</AssemblyVersion>
+    <FileVersion>2.0.1.0</FileVersion>
+    <InformationalVersion>2.0.1</InformationalVersion>
     <Authors>vicz</Authors>
     <Company>vicz</Company>
     <Product>记忆黑洞</Product>
@@ -23,8 +23,6 @@
   <ItemGroup>
     <!-- 本地数据库：SQLite + FTS5 全文索引 -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
-    <!-- 系统托盘图标 -->
-    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
   </ItemGroup>
 
 </Project>

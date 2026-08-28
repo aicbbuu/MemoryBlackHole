@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
-        xmlns:tb="http://www.hardcodet.net/taskbar"
         Title="记忆黑洞" Width="1280" Height="820" MinWidth="980" MinHeight="640"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
@@ -189,7 +188,6 @@
             <TextBlock Grid.Column="1" Text="LOCAL MEMORY VAULT" FontSize="10"
                        Foreground="#59647C" VerticalAlignment="Center" HorizontalAlignment="Center"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
-                <Button x:Name="ThemeToggleButton" Content="☀" Style="{StaticResource WindowButton}" Click="ThemeToggle_Click" ToolTip="切换亮暗主题"/>
                 <Button Content="—" Style="{StaticResource WindowButton}" Click="Minimize_Click"/>
                 <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource WindowButton}" Click="Maximize_Click"/>
                 <Button Content="×" Style="{StaticResource WindowButton}" Click="Close_Click"/>
