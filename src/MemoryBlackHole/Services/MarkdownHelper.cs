@@ -137,7 +137,11 @@ namespace MemoryBlackHole.Services
                         };
                         doc.Blocks.Add(list);
                     }
-                    var li = new ListItem(new Paragraph(ParseInline(content, darkMode).ToArray()));
+                    var inlineList = ParseInline(content, darkMode);
+                    var p = new Paragraph();
+                    foreach (var inline in inlineList)
+                        p.Inlines.Add(inline);
+                    var li = new ListItem(p);
                     list.ListItems.Add(li);
                     currentPara = null;
                     continue;
@@ -157,7 +161,11 @@ namespace MemoryBlackHole.Services
                         };
                         doc.Blocks.Add(list);
                     }
-                    var li = new ListItem(new Paragraph(ParseInline(content, darkMode).ToArray()));
+                    var inlineList = ParseInline(content, darkMode);
+                    var p = new Paragraph();
+                    foreach (var inline in inlineList)
+                        p.Inlines.Add(inline);
+                    var li = new ListItem(p);
                     list.ListItems.Add(li);
                     currentPara = null;
                     continue;
