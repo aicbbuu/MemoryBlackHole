@@ -185,25 +185,38 @@ namespace MemoryBlackHole.Views
             var dialog = new AddItemDialog { Owner = this };
             if (dialog.ShowDialog() != true) return;
 
-            // v1.0.1: 用 StoreMedia 流式复制文件到 media 目录（File.Copy，不占内存），
-            //         不再读取 FileData BLOB。单文件 >= 100MB 走原始路径。
-            for (int i = 0; i < dialog.FilePaths.Count; i++)
+            // 文本类型：直接保存内容
+            if (dialog.SelectedType == "Text")
             {
-                string? storedPath = _service.StoreMedia(dialog.FilePaths[i]);
-                string? note = storedPath == null ? "文件超过 100 MB，仅保存原始路径" : null;
-
                 _service.Add(new MemoryItem
                 {
-                    Type = dialog.SelectedType,
-                    Title = dialog.OriginalFileNames[i],
-                    Content = dialog.OriginalFileNames[i],
-                    FilePath = storedPath ?? dialog.FilePaths[i],
-                    FileData = null, // v1.0.1: 不再使用 BLOB 存储
-                    Note = note,
-                    Tags = dialog.Tags,
-                    OriginalFileName = dialog.OriginalFileNames[i],
-                    FileSizeBytes = dialog.FileSizes[i]
+                    Type = "Text",
+                    Title = null,
+                    Content = dialog.ContentText,
+                    Note = null,
+                    Tags = dialog.Tags
                 });
+            }
+            else
+            {
+                // 非文本：用 StoreMedia 流式复制文件到 media 目录
+                for (int i = 0; i < dialog.FilePaths.Count; i++)
+                {
+                    string? storedPath = _service.StoreMedia(dialog.FilePaths[i]);
+
+                    _service.Add(new MemoryItem
+                    {
+                        Type = dialog.SelectedType,
+                        Title = dialog.OriginalFileNames[i],
+                        Content = dialog.OriginalFileNames[i],
+                        FilePath = storedPath ?? dialog.FilePaths[i],
+                        FileData = null,
+                        Note = null,
+                        Tags = dialog.Tags,
+                        OriginalFileName = dialog.OriginalFileNames[i],
+                        FileSizeBytes = dialog.FileSizes[i]
+                    });
+                }
             }
 
             _frontSpace.PlayInward();

@@ -14,7 +14,7 @@ namespace MemoryBlackHole.Views
             ContentBox.Text = item.Type == "Text" ? item.Content ?? "" : item.OriginalFileName ?? "";
             ContentBox.IsReadOnly = item.Type != "Text";
             TagsBox.Text = item.Tags ?? "";
-            FileText.Text = string.IsNullOrWhiteSpace(item.OriginalFileName) ? "" : $"文件：{item.OriginalFileName}（媒体内容保存在 SQLite 中）";
+            FileText.Text = string.IsNullOrWhiteSpace(item.OriginalFileName) ? "" : $"文件：{item.OriginalFileName}";
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)

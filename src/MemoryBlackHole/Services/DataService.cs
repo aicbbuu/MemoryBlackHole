@@ -10,7 +10,7 @@ namespace MemoryBlackHole.Services
     /// <summary>
     /// 本地存储服务：SQLite 存元数据 + FTS5 全文索引。
     /// 数据全部落在 ~/.memoryblackhole/ 下的库文件与媒体目录，纯本地、无云端。
-    /// v1.0.1: 改用 trigram 分词器优化中文搜索；移除 BLOB 存储（文件全走文件系统）；
+    /// v1.0.1: 改用 unicode61 分词器 + CJK 逐字 AND 查询支持中文搜索；移除 BLOB 存储（文件全走文件系统）；
     ///         常用字段加索引加速过滤查询。
     /// </summary>
     public class DataService
@@ -22,7 +22,9 @@ namespace MemoryBlackHole.Services
         public DataService(string? dataDir = null)
         {
             // 默认存到用户目录，可被覆盖（便于测试）
-            dataDir ??= Path.Combine(AppContext.BaseDirectory, ".memoryblackhole");
+            dataDir ??= Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MemoryBlackHole");
             Directory.CreateDirectory(dataDir);
 
             _dbPath = Path.Combine(dataDir, "memory.db");
@@ -67,19 +69,19 @@ namespace MemoryBlackHole.Services
                 try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
             }
 
-            // v1.0.1: FTS5 改用 trigram 分词器，对中文 CJK 连续词做 3-gram 索引，大幅提升匹配质量
+            // v1.0.1: FTS5 改用 unicode61 分词器，CJK 每字为独立 token，配合逐字 AND 查询精准匹配
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = @"
                     DROP TABLE IF EXISTS ItemsFts;
                     CREATE VIRTUAL TABLE ItemsFts USING fts5(
                         Title, Content, Note, Tags, Content='Items', Content_Rowid='Id',
-                        tokenize='trigram'
+                        tokenize='unicode61'
                     );";
                 cmd.ExecuteNonQuery();
             }
 
-            // 重建 trigram 索引（覆盖已有数据）
+            // 重建 unicode61 索引（覆盖已有数据）
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "INSERT INTO ItemsFts(ItemsFts) VALUES('rebuild');";
@@ -155,12 +157,6 @@ namespace MemoryBlackHole.Services
             using var conn = new SqliteConnection(_connectionString);
             conn.Open();
 
-            if (string.IsNullOrWhiteSpace(keyword))
-            {
-                // 安全默认：没有搜索词时不暴露任何记忆
-                return result;
-            }
-
             string sql;
             using var cmd = conn.CreateCommand();
 
@@ -176,7 +172,7 @@ namespace MemoryBlackHole.Services
             }
             else
             {
-                // 有关键词：FTS5 匹配 — v1.0.1 trigram 分词器对中文天然友好
+                // 有关键词：FTS5 匹配 — v1.0.1 unicode61 分词器 + CJK 逐字 AND 查询
                 sql = @"SELECT i.* FROM ItemsFts f
                         JOIN Items i ON i.Id = f.Rowid
                         WHERE ItemsFts MATCH $kw";
@@ -210,20 +206,49 @@ namespace MemoryBlackHole.Services
             return result;
         }
 
-        /// <summary>把用户关键词转成安全的 FTS5 match 表达式（空格分词，逐词 AND+前缀）。
-        /// v1.0.1: trigram 分词器在字节级做 3-gram，对 CJK 中文自然友好，
-        ///         搜"记忆"即匹配含"记忆"内容，无需额外逐字拆分。</summary>
+        /// <summary>把用户关键词转成安全的 FTS5 match 表达式。
+        /// unicode61 分词器下，CJK 字符是独立 token，拆开逐字 AND 匹配；
+        /// 非 CJK 内容做前缀匹配。</summary>
         private static string BuildMatchQuery(string keyword)
         {
             var terms = keyword.Split(new[] { ' ', '　' }, StringSplitOptions.RemoveEmptyEntries);
             var parts = new List<string>();
             foreach (var t in terms)
             {
-                var esc = t.Replace("\"", "\"\"");
-                parts.Add($"\"{esc}\"*");
+                if (ContainsCJK(t))
+                {
+                    foreach (char c in t)
+                    {
+                        if (IsCJK(c))
+                            parts.Add($"\"{EscapeFts(c.ToString())}\"");
+                    }
+                }
+                else
+                {
+                    parts.Add($"\"{EscapeFts(t)}\"*");
+                }
             }
-            return string.Join(" AND ", parts);
+            var dedup = new HashSet<string>(parts);
+            return string.Join(" AND ", dedup);
         }
+
+        /// <summary>检查字符串是否包含 CJK 字符。</summary>
+        private static bool ContainsCJK(string text)
+        {
+            foreach (char c in text)
+                if (IsCJK(c)) return true;
+            return false;
+        }
+
+        /// <summary>判断字符是否为中日韩统一表意文字。</summary>
+        private static bool IsCJK(char c)
+        {
+            return (c >= 0x4E00 && c <= 0x9FFF) ||
+                   (c >= 0x3400 && c <= 0x4DBF);
+        }
+
+        /// <summary>转义 FTS5 查询中的双引号。</summary>
+        private static string EscapeFts(string s) => s.Replace("\"", "\"\"");
 
         public bool HasPassword()
         {
@@ -289,8 +314,8 @@ namespace MemoryBlackHole.Services
         }
 
         /// <summary>复制媒体文件到媒体目录，返回落盘路径。超过 maxBytes 则返回 null（改存原始路径）。
-        /// v1.0.1: maxBytes 从 200MB 缩为 100MB；改用 File.Copy 流式复制，杜绝 File.ReadAllBytes 内存暴涨。</summary>
-        public string? StoreMedia(string sourcePath, long maxBytes = 100L * 1024 * 1024)
+        /// v1.0.1: maxBytes 从 200MB 缩为 100MB 改为 500MB；改用 File.Copy 流式复制。</summary>
+        public string? StoreMedia(string sourcePath, long maxBytes = 500L * 1024 * 1024)
         {
             var info = new FileInfo(sourcePath);
             if (info.Length > maxBytes) return null; // 超限：不复制，落库时用原始路径

@@ -22,12 +22,10 @@ namespace MemoryBlackHole.Views
         /// <summary>多文件支持：文件大小列表。</summary>
         public List<long> FileSizes { get; private set; } = new();
 
-        /// <summary>单文件限制 100 MB（v1.0.1 从 200MB 缩减）。</summary>
-        private const long MaxFileSize = 100L * 1024 * 1024;
-        /// <summary>单次选择总文件大小上限 500 MB。</summary>
-        private const long MaxTotalSize = 500L * 1024 * 1024;
-        /// <summary>单次选择文件数量上限 50 个。</summary>
-        private const int MaxFileCount = 50;
+        /// <summary>文件校验：不限大小、不限数量。</summary>
+        private const long MaxFileSize = 10L * 1024 * 1024 * 1024; // 10 GB
+        private const long MaxTotalSize = 50L * 1024 * 1024 * 1024; // 50 GB
+        private const int MaxFileCount = 200;
 
         public AddItemDialog()
         {
@@ -73,32 +71,10 @@ namespace MemoryBlackHole.Views
             {
                 var info = new FileInfo(fileName);
 
-                // v1.0.1: 前置校验 — 单文件上限、总容量上限、数量上限
-                if (info.Length > MaxFileSize)
-                {
-                    MessageBox.Show($"文件 \"{info.Name}\" 超过 {MaxFileSize / 1024 / 1024}MB 限制，请选择更小的文件。",
-                        "文件过大", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                totalSize += info.Length;
-                if (totalSize > MaxTotalSize)
-                {
-                    MessageBox.Show($"选中的文件总大小超过 {MaxTotalSize / 1024 / 1024}MB 限制，请减少文件数量。",
-                        "总大小超限", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                if (FilePaths.Count >= MaxFileCount)
-                {
-                    MessageBox.Show($"一次最多选择 {MaxFileCount} 个文件。",
-                        "文件数量超限", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
                 FilePaths.Add(fileName);
                 OriginalFileNames.Add(info.Name);
                 FileSizes.Add(info.Length);
+                totalSize += info.Length;
 
                 string sizeStr = FormatSize(info.Length);
                 displayItems.Add($"{info.Name}  ({sizeStr})");
