@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
@@ -136,7 +137,7 @@ namespace MemoryBlackHole.Services
                         };
                         doc.Blocks.Add(list);
                     }
-                    var li = new ListItem(new Paragraph(ParseInline(content, darkMode)));
+                    var li = new ListItem(new Paragraph(ParseInline(content, darkMode).ToArray()));
                     list.ListItems.Add(li);
                     currentPara = null;
                     continue;
@@ -156,7 +157,7 @@ namespace MemoryBlackHole.Services
                         };
                         doc.Blocks.Add(list);
                     }
-                    var li = new ListItem(new Paragraph(ParseInline(content, darkMode)));
+                    var li = new ListItem(new Paragraph(ParseInline(content, darkMode).ToArray()));
                     list.ListItems.Add(li);
                     currentPara = null;
                     continue;
