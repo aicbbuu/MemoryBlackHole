@@ -185,22 +185,22 @@ namespace MemoryBlackHole.Views
             var dialog = new AddItemDialog { Owner = this };
             if (dialog.ShowDialog() != true) return;
 
-            // 多文件支持：每个文件新增一条记忆
+            // v1.0.1: 用 StoreMedia 流式复制文件到 media 目录（File.Copy，不占内存），
+            //         不再读取 FileData BLOB。单文件 >= 100MB 走原始路径。
             for (int i = 0; i < dialog.FilePaths.Count; i++)
             {
-                string? storedPath = dialog.FileDataList[i] == null && dialog.FileSizes[i] > 200L * 1024 * 1024
-                    ? dialog.FilePaths[i] : null;
-                string? note = storedPath != null ? "文件超过 200 MB，仅保存原始路径" : null;
+                string? storedPath = _service.StoreMedia(dialog.FilePaths[i]);
+                string? note = storedPath == null ? "文件超过 100 MB，仅保存原始路径" : null;
 
                 _service.Add(new MemoryItem
                 {
                     Type = dialog.SelectedType,
+                    Title = dialog.OriginalFileNames[i],
                     Content = dialog.OriginalFileNames[i],
-                    FileData = dialog.FileDataList[i],
+                    FilePath = storedPath ?? dialog.FilePaths[i],
+                    FileData = null, // v1.0.1: 不再使用 BLOB 存储
                     Note = note,
                     Tags = dialog.Tags,
-                    Title = dialog.OriginalFileNames[i],
-                    FilePath = storedPath,
                     OriginalFileName = dialog.OriginalFileNames[i],
                     FileSizeBytes = dialog.FileSizes[i]
                 });

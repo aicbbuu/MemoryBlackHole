@@ -19,10 +19,15 @@ namespace MemoryBlackHole.Views
         public List<string> FilePaths { get; private set; } = new();
         /// <summary>多文件支持：原始文件名列表。</summary>
         public List<string> OriginalFileNames { get; private set; } = new();
-        /// <summary>多文件支持：文件二进制数据列表（超限为 null）。</summary>
-        public List<byte[]?> FileDataList { get; private set; } = new();
         /// <summary>多文件支持：文件大小列表。</summary>
         public List<long> FileSizes { get; private set; } = new();
+
+        /// <summary>单文件限制 100 MB（v1.0.1 从 200MB 缩减）。</summary>
+        private const long MaxFileSize = 100L * 1024 * 1024;
+        /// <summary>单次选择总文件大小上限 500 MB。</summary>
+        private const long MaxTotalSize = 500L * 1024 * 1024;
+        /// <summary>单次选择文件数量上限 50 个。</summary>
+        private const int MaxFileCount = 50;
 
         public AddItemDialog()
         {
@@ -59,33 +64,49 @@ namespace MemoryBlackHole.Views
             // 清空之前的选中
             FilePaths.Clear();
             OriginalFileNames.Clear();
-            FileDataList.Clear();
             FileSizes.Clear();
 
             var displayItems = new List<string>();
+            long totalSize = 0;
 
             foreach (var fileName in dialog.FileNames)
             {
                 var info = new FileInfo(fileName);
+
+                // v1.0.1: 前置校验 — 单文件上限、总容量上限、数量上限
+                if (info.Length > MaxFileSize)
+                {
+                    MessageBox.Show($"文件 \"{info.Name}\" 超过 {MaxFileSize / 1024 / 1024}MB 限制，请选择更小的文件。",
+                        "文件过大", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                totalSize += info.Length;
+                if (totalSize > MaxTotalSize)
+                {
+                    MessageBox.Show($"选中的文件总大小超过 {MaxTotalSize / 1024 / 1024}MB 限制，请减少文件数量。",
+                        "总大小超限", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                if (FilePaths.Count >= MaxFileCount)
+                {
+                    MessageBox.Show($"一次最多选择 {MaxFileCount} 个文件。",
+                        "文件数量超限", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 FilePaths.Add(fileName);
                 OriginalFileNames.Add(info.Name);
                 FileSizes.Add(info.Length);
 
-                if (info.Length <= 200L * 1024 * 1024)
-                    FileDataList.Add(File.ReadAllBytes(info.FullName));
-                else
-                    FileDataList.Add(null);
-
                 string sizeStr = FormatSize(info.Length);
-                string status = info.Length <= 200L * 1024 * 1024
-                    ? "✓ 存入数据库"
-                    : "⚠ 仅保存路径（超 200 MB）";
-                displayItems.Add($"{info.Name}  ({sizeStr})  {status}");
+                displayItems.Add($"{info.Name}  ({sizeStr})");
             }
 
             // 更新 UI
             int count = displayItems.Count;
-            SelectedFileText.Text = $"已选择 {count} 个文件";
+            SelectedFileText.Text = $"已选择 {count} 个文件（共 {FormatSize(totalSize)}）";
             FileListBox.ItemsSource = displayItems;
             FileListBox.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -111,7 +132,7 @@ namespace MemoryBlackHole.Views
             }
             else if (FilePaths.Count == 0)
             {
-                MessageBox.Show("请先点击“选择本地文件”", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("请先点击\u201C选择本地文件\u201D", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 

@@ -10,6 +10,8 @@ namespace MemoryBlackHole.Services
     /// <summary>
     /// 本地存储服务：SQLite 存元数据 + FTS5 全文索引。
     /// 数据全部落在 ~/.memoryblackhole/ 下的库文件与媒体目录，纯本地、无云端。
+    /// v1.0.1: 改用 trigram 分词器优化中文搜索；移除 BLOB 存储（文件全走文件系统）；
+    ///         常用字段加索引加速过滤查询。
     /// </summary>
     public class DataService
     {
@@ -65,23 +67,36 @@ namespace MemoryBlackHole.Services
                 try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
             }
 
-            // FTS5 全文索引（虚拟表；文本内容 + 备注 + 标题 + 标签 都进索引）
+            // v1.0.1: FTS5 改用 trigram 分词器，对中文 CJK 连续词做 3-gram 索引，大幅提升匹配质量
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = @"
-                    CREATE VIRTUAL TABLE IF NOT EXISTS ItemsFts USING fts5(
-                        Title, Content, Note, Tags, Content='Items', Content_Rowid='Id'
+                    DROP TABLE IF EXISTS ItemsFts;
+                    CREATE VIRTUAL TABLE ItemsFts USING fts5(
+                        Title, Content, Note, Tags, Content='Items', Content_Rowid='Id',
+                        tokenize='trigram'
                     );";
                 cmd.ExecuteNonQuery();
             }
 
-            // 同步已有数据到 FTS（首次建索引）
+            // 重建 trigram 索引（覆盖已有数据）
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO ItemsFts(ItemsFts) VALUES('rebuild');";
+                try { cmd.ExecuteNonQuery(); } catch { /* 表刚建时已空 */ }
+            }
+
+            // v1.0.1: 常用字段加索引，加速过滤查询
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = @"
-                    INSERT INTO ItemsFts(ItemsFts) VALUES('rebuild');";
-                try { cmd.ExecuteNonQuery(); } catch { /* 表刚建时已空 */ }
+                    CREATE INDEX IF NOT EXISTS IX_Items_Type ON Items(Type);
+                    CREATE INDEX IF NOT EXISTS IX_Items_CreatedAt ON Items(CreatedAt);
+                    CREATE INDEX IF NOT EXISTS IX_Items_Favorite ON Items(IsFavorite);";
+                cmd.ExecuteNonQuery();
             }
+
+            // Settings 表 + FTS 触发器（自动同步增删改到索引）
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = @"
@@ -107,22 +122,22 @@ namespace MemoryBlackHole.Services
             }
         }
 
-        /// <summary>新增一条记忆，返回自增Id。</summary>
+        /// <summary>新增一条记忆，返回自增Id。
+        /// v1.0.1: 不再接收 FileData BLOB，文件全走文件系统路径存储。</summary>
         public long Add(MemoryItem item)
         {
             using var conn = new SqliteConnection(_connectionString);
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                INSERT INTO Items(Type, Title, Content, FilePath, FileData, OriginalFileName,
-                                  FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                VALUES ($type, $title, $content, $file, $data, $ofn, $fsize, $note, $tags, $created, $fav);
+                INSERT INTO Items(Type, Title, Content, FilePath,
+                                  OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
+                VALUES ($type, $title, $content, $file, $ofn, $fsize, $note, $tags, $created, $fav);
                 SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$type", item.Type);
             cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$file", (object?)item.FilePath ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$data", (object?)item.FileData ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
             cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
@@ -161,7 +176,7 @@ namespace MemoryBlackHole.Services
             }
             else
             {
-                // 有关键词：FTS5 匹配（注意 FTS5 MATCH 语法，用双引号包住避免词法错误）
+                // 有关键词：FTS5 匹配 — v1.0.1 trigram 分词器对中文天然友好
                 sql = @"SELECT i.* FROM ItemsFts f
                         JOIN Items i ON i.Id = f.Rowid
                         WHERE ItemsFts MATCH $kw";
@@ -195,14 +210,15 @@ namespace MemoryBlackHole.Services
             return result;
         }
 
-        /// <summary>把用户关键词转成安全的 FTS5 match 表达式（空格分词，逐词 AND+前缀）。</summary>
+        /// <summary>把用户关键词转成安全的 FTS5 match 表达式（空格分词，逐词 AND+前缀）。
+        /// v1.0.1: trigram 分词器在字节级做 3-gram，对 CJK 中文自然友好，
+        ///         搜"记忆"即匹配含"记忆"内容，无需额外逐字拆分。</summary>
         private static string BuildMatchQuery(string keyword)
         {
             var terms = keyword.Split(new[] { ' ', '　' }, StringSplitOptions.RemoveEmptyEntries);
             var parts = new List<string>();
             foreach (var t in terms)
             {
-                // 转义双引号，再加通配符支持前缀匹配
                 var esc = t.Replace("\"", "\"\"");
                 parts.Add($"\"{esc}\"*");
             }
@@ -272,8 +288,9 @@ namespace MemoryBlackHole.Services
             return cmd.ExecuteScalar() as string;
         }
 
-        /// <summary>用路径存储媒体文件副本到媒体目录，返回落盘路径。超过 maxBytes 则返回 null（改存原始路径）。</summary>
-        public string? StoreMedia(string sourcePath, long maxBytes = 200 * 1024 * 1024)
+        /// <summary>复制媒体文件到媒体目录，返回落盘路径。超过 maxBytes 则返回 null（改存原始路径）。
+        /// v1.0.1: maxBytes 从 200MB 缩为 100MB；改用 File.Copy 流式复制，杜绝 File.ReadAllBytes 内存暴涨。</summary>
+        public string? StoreMedia(string sourcePath, long maxBytes = 100L * 1024 * 1024)
         {
             var info = new FileInfo(sourcePath);
             if (info.Length > maxBytes) return null; // 超限：不复制，落库时用原始路径
