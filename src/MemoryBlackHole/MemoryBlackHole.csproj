@@ -24,7 +24,7 @@
     <!-- 本地数据库：SQLite + FTS5 全文索引 -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
     <!-- 系统托盘图标 -->
-    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.3" />
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
   </ItemGroup>
 
 </Project>
