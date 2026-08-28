@@ -92,7 +92,7 @@ namespace MemoryBlackHole.Views
 
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show($"确定删除这条{item.TypeName}记忆吗？\n此操作不可恢复。",
+            var result = MessageBox.Show($"确定删除这条{_item.TypeName}记忆吗？\n此操作不可恢复。",
                 "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Yes)
             {

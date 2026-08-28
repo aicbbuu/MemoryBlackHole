@@ -26,7 +26,7 @@ namespace MemoryBlackHole.Services
             // Environment.ProcessPath 在单文件发布时返回真实 EXE 路径
             dataDir ??= Path.Combine(
                 Path.GetDirectoryName(
-                    Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location)!,
+                    Environment.ProcessPath ?? AppContext.BaseDirectory)!,
                 ".memoryblackhole");
             Directory.CreateDirectory(dataDir);
 
