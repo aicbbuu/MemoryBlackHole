@@ -2,8 +2,10 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Media.Imaging;
 using MemoryBlackHole.Models;
+using MemoryBlackHole.Services;
 
 namespace MemoryBlackHole.Views
 {
@@ -28,8 +30,18 @@ namespace MemoryBlackHole.Views
         {
             if (_item.Type == "Text")
             {
-                TextViewer.Visibility = Visibility.Visible;
-                TextContent.Text = _item.Content ?? "";
+                // 文本：支持 Markdown 渲染
+                MarkdownViewer.Visibility = Visibility.Visible;
+                var doc = MarkdownHelper.ToFlowDocument(_item.Content ?? "");
+                ((FlowDocumentScrollViewer)MarkdownViewer).Document = doc;
+                return;
+            }
+
+            if (_item.Type == "Link")
+            {
+                // 链接：显示可点击链接
+                LinkPanel.Visibility = Visibility.Visible;
+                LinkUrlText.Text = _item.Content ?? _item.Title ?? "";
                 return;
             }
 
@@ -81,6 +93,23 @@ namespace MemoryBlackHole.Views
             catch (Exception ex)
             {
                 new NoticeDialog("打开失败", $"无法使用系统程序打开该文件。\n{ex.Message}") { Owner = this }.ShowDialog();
+            }
+        }
+
+        /// <summary>打开链接。</summary>
+        private void OpenLink_Click(object sender, RoutedEventArgs e)
+        {
+            var url = _item.Content ?? _item.Title;
+            if (!string.IsNullOrEmpty(url))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    new NoticeDialog("打开失败", $"无法打开链接。\n{ex.Message}") { Owner = this }.ShowDialog();
+                }
             }
         }
 

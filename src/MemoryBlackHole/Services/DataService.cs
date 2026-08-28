@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using MemoryBlackHole.Models;
 
@@ -69,6 +70,17 @@ namespace MemoryBlackHole.Services
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = "ALTER TABLE Items ADD COLUMN FileData BLOB NULL;";
+                try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
+            }
+            // v2.0.0: 回收站列
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "ALTER TABLE Items ADD COLUMN IsDeleted INTEGER DEFAULT 0;";
+                try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "ALTER TABLE Items ADD COLUMN DeletedAt TEXT NULL;";
                 try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
             }
 

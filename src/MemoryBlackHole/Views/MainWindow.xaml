@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
+        xmlns:tb="http://www.hardcodet.net/taskbar"
         Title="记忆黑洞" Width="1280" Height="820" MinWidth="980" MinHeight="640"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
@@ -133,9 +134,16 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border Width="38" Height="38" CornerRadius="19" Background="#6D5DF7">
-                        <TextBlock Text="✦" FontSize="18" Foreground="White"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- 缩略图：图片类型显示小图，其他显示图标 -->
+                    <Border Width="42" Height="42" CornerRadius="10" Background="#6D5DF7">
+                        <Grid>
+                            <TextBlock Text="✦" FontSize="20" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding ThumbnailVisibility}"/>
+                            <Image Source="{Binding ThumbnailPath}" Width="42" Height="42"
+                                   Stretch="UniformToFill"
+                                   Visibility="{Binding ThumbnailImageVisibility}"/>
+                        </Grid>
                     </Border>
                     <StackPanel Grid.Column="1" Margin="12,0,16,0">
                         <TextBlock Text="{Binding DisplayText}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"/>
@@ -181,6 +189,7 @@
             <TextBlock Grid.Column="1" Text="LOCAL MEMORY VAULT" FontSize="10"
                        Foreground="#59647C" VerticalAlignment="Center" HorizontalAlignment="Center"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
+                <Button x:Name="ThemeToggleButton" Content="☀" Style="{StaticResource WindowButton}" Click="ThemeToggle_Click" ToolTip="切换亮暗主题"/>
                 <Button Content="—" Style="{StaticResource WindowButton}" Click="Minimize_Click"/>
                 <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource WindowButton}" Click="Maximize_Click"/>
                 <Button Content="×" Style="{StaticResource WindowButton}" Click="Close_Click"/>
@@ -259,6 +268,13 @@
                     <Rectangle Height="1" Fill="#20263A" Margin="0,10,0,10"/>
                     <TextBlock x:Name="StatsText" Text="加载中…" FontSize="11"
                                Foreground="#68748F" TextWrapping="Wrap"/>
+                    <!-- 操作按钮 -->
+                    <Button Content="🗑 回收站" Style="{StaticResource PillButton}" FontSize="11"
+                            HorizontalAlignment="Left" Margin="0,8,0,0" Click="RecycleBin_Click"/>
+                    <Button Content="📤 导出" Style="{StaticResource PillButton}" FontSize="11"
+                            HorizontalAlignment="Left" Margin="0,6,0,0" Click="Export_Click"/>
+                    <Button Content="📥 导入" Style="{StaticResource PillButton}" FontSize="11"
+                            HorizontalAlignment="Left" Margin="0,6,0,0" Click="Import_Click"/>
                 </StackPanel>
                 <!-- 右侧：搜索 + 结果 -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Top">

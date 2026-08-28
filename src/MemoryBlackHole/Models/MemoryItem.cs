@@ -40,6 +40,26 @@ namespace MemoryBlackHole.Models
         /// <summary>是否收藏</summary>
         public bool IsFavorite { get; set; }
 
+        /// <summary>是否已删除（回收站）</summary>
+        public bool IsDeleted { get; set; }
+
+        /// <summary>删除时间</summary>
+        public DateTime? DeletedAt { get; set; }
+
+        /// <summary>缩略图路径（仅 Image 类型使用）。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? ThumbnailPath => Type == "Image" ? FilePath : null;
+
+        /// <summary>缩略图图标可见性。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Windows.Visibility ThumbnailVisibility =>
+            Type == "Image" ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+        /// <summary>缩略图图片可见性。</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public System.Windows.Visibility ThumbnailImageVisibility =>
+            Type == "Image" ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
         /// <summary>供搜索用的摘要/预览文本。</summary>
         public string DisplayText
         {

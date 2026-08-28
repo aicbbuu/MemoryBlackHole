@@ -53,13 +53,14 @@
                 <RadioButton x:Name="RVVideo" Content="🎬 视频" Tag="Video" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
                 <RadioButton x:Name="RAudio" Content="🎵 音频" Tag="Audio" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
                 <RadioButton x:Name="RFile" Content="📄 文件" Tag="File" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                <RadioButton x:Name="RLink" Content="🔗 链接" Tag="Link" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
             </WrapPanel>
             <Grid Grid.Row="3">
                 <TextBox x:Name="ContentBox" Background="#171D30" BorderBrush="#303B59" Foreground="White"
                          Padding="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
                          VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
                 <StackPanel x:Name="FilePanel" Visibility="Collapsed">
-                    <TextBlock Text="媒体文件将直接保存到本地 SQLite 数据库" Foreground="#AEB6CD" Margin="0,0,0,12"/>
+                    <TextBlock Text="媒体文件将保存到本地 media 目录，不存入数据库" Foreground="#AEB6CD" Margin="0,0,0,12"/>
                     <Button Content="选择本地文件" Width="150" Height="40" HorizontalAlignment="Left"
                             Background="#6D5DF7" Foreground="White" BorderThickness="0" Cursor="Hand" Click="ChooseFile_Click"/>
                     <TextBlock x:Name="SelectedFileText" Text="尚未选择文件" Foreground="#8991A8"

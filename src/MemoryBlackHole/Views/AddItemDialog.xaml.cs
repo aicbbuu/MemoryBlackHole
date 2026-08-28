@@ -81,10 +81,13 @@ namespace MemoryBlackHole.Views
         {
             if (ContentBox == null || FilePanel == null || sender is not RadioButton radio) return;
             SelectedType = radio.Tag?.ToString() ?? "Text";
-            bool text = SelectedType == "Text";
+            bool text = SelectedType == "Text" || SelectedType == "Link";
             ContentBox.Visibility = text ? Visibility.Visible : Visibility.Collapsed;
             FilePanel.Visibility = text ? Visibility.Collapsed : Visibility.Visible;
-            // 不自动打开文件选择窗口，必须由用户点击按钮。
+            if (SelectedType == "Link")
+                ContentBox.ToolTip = "输入链接地址（如 https://github.com/）";
+            else
+                ContentBox.ToolTip = "输入文本内容";
         }
 
         private void ChooseFile_Click(object sender, RoutedEventArgs e)
@@ -147,6 +150,20 @@ namespace MemoryBlackHole.Views
                 if (string.IsNullOrWhiteSpace(ContentText))
                 {
                     MessageBox.Show("请输入文本内容", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
+            else if (SelectedType == "Link")
+            {
+                ContentText = ContentBox.Text?.Trim() ?? "";
+                if (string.IsNullOrWhiteSpace(ContentText))
+                {
+                    MessageBox.Show("请输入链接地址", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                if (!ContentText.StartsWith("http://") && !ContentText.StartsWith("https://"))
+                {
+                    MessageBox.Show("链接必须以 http:// 或 https:// 开头", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
             }

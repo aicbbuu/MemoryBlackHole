@@ -25,9 +25,16 @@
             <TextBlock x:Name="TitleText" Text="查看记忆" FontSize="22" FontWeight="Light" Foreground="White"/>
             <TextBlock x:Name="MetaText" Grid.Row="1" Foreground="#9D8BFF" FontSize="12" Margin="0,8,0,16"/>
             <Grid Grid.Row="2">
-                <ScrollViewer x:Name="TextViewer" VerticalScrollBarVisibility="Auto">
-                    <TextBlock x:Name="TextContent" Foreground="#E9ECF5" FontSize="15" TextWrapping="Wrap"/>
-                </ScrollViewer>
+                <FlowDocumentScrollViewer x:Name="MarkdownViewer" Visibility="Collapsed"
+                                          VerticalScrollBarVisibility="Auto" BorderThickness="0"
+                                          Background="Transparent"/>
+                <StackPanel x:Name="LinkPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🔗 链接记忆" FontSize="18" Foreground="White" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="LinkUrlText" Foreground="#9D8BFF" TextWrapping="Wrap"
+                               TextAlignment="Center" Margin="0,12,0,16" FontSize="13"/>
+                    <Button Content="打开链接" Width="110" Click="OpenLink_Click"
+                            Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
+                </StackPanel>
                 <Image x:Name="ImagePreview" Stretch="Uniform" Visibility="Collapsed"/>
                 <MediaElement x:Name="MediaPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
                               Visibility="Collapsed" Stretch="Uniform"/>

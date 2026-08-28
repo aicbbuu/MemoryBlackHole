@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using Hardcodet.Wpf.TaskbarNotification;
 using MemoryBlackHole.Models;
 using MemoryBlackHole.Services;
 
@@ -23,6 +26,9 @@ namespace MemoryBlackHole.Views
         private bool _flipping;
         private DateTime _lastFrame;
         private string? _activeTag;
+        private bool _isDarkMode = true;
+        private TaskbarIcon? _trayIcon;
+        private Color _accentColor = Color.FromRgb(0x6D, 0x5D, 0xF7);
 
         public MainWindow()
         {
@@ -41,6 +47,12 @@ namespace MemoryBlackHole.Views
 
             Loaded += (_, _) =>
             {
+                // Mica 毛玻璃效果
+                WindowEffects.EnableMica(this, _isDarkMode);
+
+                // 系统托盘
+                SetupTrayIcon();
+
                 // 从程序集自动读取版本号
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
                 if (ver != null)
@@ -48,7 +60,11 @@ namespace MemoryBlackHole.Views
                 RefreshSearchResults();
                 CompositionTarget.Rendering += OnRendering;
             };
-            Closed += (_, _) => CompositionTarget.Rendering -= OnRendering;
+            Closed += (_, _) =>
+            {
+                CompositionTarget.Rendering -= OnRendering;
+                _trayIcon?.Dispose();
+            };
         }
 
         private void WindowFrame_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -125,7 +141,44 @@ namespace MemoryBlackHole.Views
             MaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
         }
 
-        private void Close_Click(object sender, RoutedEventArgs e) => Close();
+        private void Close_Click(object sender, RoutedEventArgs e)
+        {
+            // 关闭窗口时最小化到托盘
+            Hide();
+            if (_trayIcon != null)
+                _trayIcon.ShowBalloonTip("记忆黑洞", "程序仍在后台运行，双击托盘图标恢复。", BalloonIcon.Info);
+        }
+
+        /// <summary>切换亮暗主题。</summary>
+        private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            _isDarkMode = !_isDarkMode;
+            ThemeToggleButton.Content = _isDarkMode ? "☀" : "☾";
+            WindowEffects.SetDarkMode(this, _isDarkMode);
+
+            // 切换资源字典
+            var oldDict = Resources.MergedDictionaries.FirstOrDefault(d =>
+                d.Source != null && d.Source.OriginalString.Contains("LightTheme"));
+            if (_isDarkMode)
+            {
+                // 切回暗色：移除 LightTheme
+                if (oldDict != null) Resources.MergedDictionaries.Remove(oldDict);
+            }
+            else
+            {
+                // 切到亮色：添加 LightTheme
+                if (oldDict == null)
+                {
+                    var newDict = new ResourceDictionary
+                    {
+                        Source = new Uri("/MemoryBlackHole;component/Themes/LightTheme.xaml", UriKind.Relative)
+                    };
+                    Resources.MergedDictionaries.Add(newDict);
+                    // 调整窗口背景透明度
+                    Background = new SolidColorBrush(Color.FromArgb(240, 240, 245, 252));
+                }
+            }
+        }
 
         private void OpenGitHub_Click(object sender, RoutedEventArgs e)
         {
@@ -275,6 +328,17 @@ namespace MemoryBlackHole.Views
                     Tags = dialog.Tags
                 });
             }
+            else if (dialog.SelectedType == "Link")
+            {
+                _service.Add(new MemoryItem
+                {
+                    Type = "Link",
+                    Title = dialog.ContentText,
+                    Content = dialog.ContentText,
+                    Note = null,
+                    Tags = dialog.Tags
+                });
+            }
             else
             {
                 // 非文本：用 StoreMedia 流式复制文件到 media 目录
@@ -313,7 +377,7 @@ namespace MemoryBlackHole.Views
                 preview.ShowDialog();
                 if (preview.DeleteRequested)
                 {
-                    _service?.Delete(item.Id);
+                    _service?.SoftDelete(item.Id);
                     RefreshSearchResults();
                 }
                 else if (preview.EditRequested)
@@ -419,6 +483,142 @@ namespace MemoryBlackHole.Views
                                  $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
             }
             catch { /* 静默 */ }
+        }
+
+        /// <summary>设置系统托盘。</summary>
+        private void SetupTrayIcon()
+        {
+            try
+            {
+                _trayIcon = new TaskbarIcon
+                {
+                    ToolTipText = "记忆黑洞",
+                    IconSource = new System.Windows.Media.Imaging.BitmapImage(
+                        new Uri("pack://application:,,,/Assets/AppIcon.ico", UriKind.Absolute)),
+                    Visibility = Visibility.Visible
+                };
+
+                _trayIcon.TrayMouseDoubleClick += (_, _) =>
+                {
+                    Show();
+                    WindowState = WindowState.Normal;
+                    Activate();
+                };
+
+                _trayIcon.ContextMenu = new ContextMenu();
+                _trayIcon.ContextMenu.Items.Add(new MenuItem
+                {
+                    Header = "显示窗口",
+                    Command = new RelayCommand(() =>
+                    {
+                        Show();
+                        WindowState = WindowState.Normal;
+                        Activate();
+                    })
+                });
+                _trayIcon.ContextMenu.Items.Add(new MenuItem
+                {
+                    Header = "退出",
+                    Command = new RelayCommand(() =>
+                    {
+                        _trayIcon?.Dispose();
+                        _trayIcon = null;
+                        Application.Current.Shutdown();
+                    })
+                });
+            }
+            catch { /* 托盘初始化失败时静默 */ }
+        }
+
+        /// <summary>打开回收站。</summary>
+        private void RecycleBin_Click(object sender, RoutedEventArgs e)
+        {
+            if (_service == null) return;
+            try
+            {
+                var items = _service.GetDeletedItems();
+                if (items.Count == 0)
+                {
+                    new NoticeDialog("回收站", "回收站为空。") { Owner = this }.ShowDialog();
+                    return;
+                }
+
+                var dialog = new NoticeDialog($"回收站（{items.Count} 条）",
+                    $"共有 {items.Count} 条已删除的记忆。\n\n" +
+                    string.Join("\n", items.Take(20).Select(i =>
+                        $"  {i.TypeName} · {i.DisplayText?.Length > 30 ? i.DisplayText[..30] + "…" : i.DisplayText ?? "(无标题)"}")) +
+                    (items.Count > 20 ? $"\n  …以及 {items.Count - 20} 条" : "") +
+                    "\n\n点击「确定」永久清空回收站。\n点击「取消」保留所有内容。")
+                { Owner = this };
+                // 自定义对话框显示
+                var result = MessageBox.Show("是否恢复所有回收站中的记忆？\n\n选「是」→ 全部恢复\n选「否」→ 永久清空\n选「取消」→ 不做任何操作",
+                    $"回收站（{items.Count} 条）",
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
+                {
+                    foreach (var item in items)
+                        _service.Restore(item.Id);
+                    new NoticeDialog("回收站", $"已恢复 {items.Count} 条记忆。") { Owner = this }.ShowDialog();
+                }
+                else if (result == MessageBoxResult.No)
+                {
+                    int count = _service.EmptyRecycleBin();
+                    new NoticeDialog("回收站", $"已永久删除 {count} 条记忆。") { Owner = this }.ShowDialog();
+                }
+                RefreshSearchResults();
+            }
+            catch (Exception ex)
+            {
+                new NoticeDialog("回收站错误", ex.Message) { Owner = this }.ShowDialog();
+            }
+        }
+
+        /// <summary>导出所有记忆为 JSON 文件。</summary>
+        private void Export_Click(object sender, RoutedEventArgs e)
+        {
+            if (_service == null) return;
+            try
+            {
+                var json = _service.ExportToJson();
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "导出记忆",
+                    Filter = "JSON 文件|*.json",
+                    FileName = $"记忆黑洞备份_{DateTime.Now:yyyyMMdd_HHmm}.json"
+                };
+                if (dialog.ShowDialog() == true)
+                {
+                    File.WriteAllText(dialog.FileName, json);
+                    new NoticeDialog("导出成功", $"已导出到：\n{dialog.FileName}") { Owner = this }.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                new NoticeDialog("导出失败", ex.Message) { Owner = this }.ShowDialog();
+            }
+        }
+
+        /// <summary>从 JSON 文件导入记忆。</summary>
+        private void Import_Click(object sender, RoutedEventArgs e)
+        {
+            if (_service == null) return;
+            try
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "选择导入文件",
+                    Filter = "JSON 文件|*.json|所有文件|*.*"
+                };
+                if (dialog.ShowDialog() != true) return;
+                var json = File.ReadAllText(dialog.FileName);
+                int count = _service.ImportFromJson(json);
+                new NoticeDialog("导入成功", $"成功导入 {count} 条记忆。\n（已存在的 ID 自动跳过）") { Owner = this }.ShowDialog();
+                RefreshSearchResults();
+            }
+            catch (Exception ex)
+            {
+                new NoticeDialog("导入失败", ex.Message) { Owner = this }.ShowDialog();
+            }
         }
 
         /// <summary>现代化 2.5D 黑洞视觉：引力透镜式椭圆吸积盘、热光环和粒子轨道。</summary>
