@@ -139,7 +139,7 @@
                             <TextBlock Text="✦" FontSize="20" Foreground="White"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="{Binding ThumbnailVisibility}"/>
-                            <Image Source="{Binding ThumbnailPath}" Width="42" Height="42"
+                            <Image Source="{Binding ThumbnailSource}" Width="42" Height="42"
                                    Stretch="UniformToFill"
                                    Visibility="{Binding ThumbnailImageVisibility}"/>
                         </Grid>

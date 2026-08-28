@@ -46,19 +46,38 @@ namespace MemoryBlackHole.Models
         /// <summary>删除时间</summary>
         public DateTime? DeletedAt { get; set; }
 
-        /// <summary>缩略图路径（仅 Image 类型使用）。</summary>
+        /// <summary>缩略图源（从 FileData BLOB 加载，仅 Image 类型使用）。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public string? ThumbnailPath => Type == "Image" ? FilePath : null;
+        public System.Windows.Media.ImageSource? ThumbnailSource
+        {
+            get
+            {
+                if (Type != "Image" || FileData == null || FileData.Length == 0) return null;
+                try
+                {
+                    var img = new System.Windows.Media.Imaging.BitmapImage();
+                    using var ms = new System.IO.MemoryStream(FileData);
+                    img.BeginInit();
+                    img.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    img.StreamSource = ms;
+                    img.DecodePixelWidth = 84;
+                    img.EndInit();
+                    img.Freeze();
+                    return img;
+                }
+                catch { return null; }
+            }
+        }
 
         /// <summary>缩略图图标可见性。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public System.Windows.Visibility ThumbnailVisibility =>
-            Type == "Image" ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+            Type == "Image" && ThumbnailSource != null ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
 
         /// <summary>缩略图图片可见性。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
         public System.Windows.Visibility ThumbnailImageVisibility =>
-            Type == "Image" ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            Type == "Image" && ThumbnailSource != null ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
         /// <summary>供搜索用的摘要/预览文本。</summary>
         public string DisplayText

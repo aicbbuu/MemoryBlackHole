@@ -60,7 +60,7 @@
                          Padding="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
                          VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
                 <StackPanel x:Name="FilePanel" Visibility="Collapsed">
-                    <TextBlock Text="媒体文件将保存到本地 media 目录，不存入数据库" Foreground="#AEB6CD" Margin="0,0,0,12"/>
+                    <TextBlock Text="媒体文件将直接存入本地数据库（SQLite BLOB）" Foreground="#AEB6CD" Margin="0,0,0,12"/>
                     <Button Content="选择本地文件" Width="150" Height="40" HorizontalAlignment="Left"
                             Background="#6D5DF7" Foreground="White" BorderThickness="0" Cursor="Hand" Click="ChooseFile_Click"/>
                     <TextBlock x:Name="SelectedFileText" Text="尚未选择文件" Foreground="#8991A8"
@@ -75,7 +75,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Text="支持图片、视频、音频和其他文件。大文件将自动保存原始路径，不做本地副本。"
+                    <TextBlock Text="支持图片、视频、音频和其他文件。文件将直接存入本地数据库。"
                                Foreground="#65708A" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0"/>
                 </StackPanel>
             </Grid>

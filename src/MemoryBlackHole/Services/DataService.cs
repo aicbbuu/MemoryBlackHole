@@ -13,12 +13,11 @@ namespace MemoryBlackHole.Services
     /// <summary>
     /// 本地存储服务：SQLite 存元数据 + FTS5 全文索引。
     /// 数据全部落在 EXE 同目录 .memoryblackhole/ 下，纯本地、无云端。
-    /// v1.0.2: 恢复 EXE 目录存储路径；中文搜索改用 LIKE 模糊匹配。
+    /// v2.0.1: 文件数据全部存入 SQLite BLOB；中文搜索 LIKE；回收站+导出导入。
     /// </summary>
     public class DataService
     {
         private readonly string _dbPath;
-        private readonly string _mediaDir;
         private readonly string _connectionString;
 
         public DataService(string? dataDir = null)
@@ -32,14 +31,10 @@ namespace MemoryBlackHole.Services
             Directory.CreateDirectory(dataDir);
 
             _dbPath = Path.Combine(dataDir, "memory.db");
-            _mediaDir = Path.Combine(dataDir, "media");
-            Directory.CreateDirectory(_mediaDir);
 
             _connectionString = $"Data Source={_dbPath}";
             Init();
         }
-
-        public string MediaDirectory => _mediaDir;
 
         private void Init()
         {
@@ -139,22 +134,22 @@ namespace MemoryBlackHole.Services
             }
         }
 
-        /// <summary>新增一条记忆，返回自增Id。
-        /// v1.0.1: 不再接收 FileData BLOB，文件全走文件系统路径存储。</summary>
+        /// <summary>新增一条记忆，返回自增Id。文件数据直接存入 SQLite BLOB。</summary>
         public long Add(MemoryItem item)
         {
             using var conn = new SqliteConnection(_connectionString);
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                INSERT INTO Items(Type, Title, Content, FilePath,
+                INSERT INTO Items(Type, Title, Content, FilePath, FileData,
                                   OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                VALUES ($type, $title, $content, $file, $ofn, $fsize, $note, $tags, $created, $fav);
+                VALUES ($type, $title, $content, $file, $fdata, $ofn, $fsize, $note, $tags, $created, $fav);
                 SELECT last_insert_rowid();";
             cmd.Parameters.AddWithValue("$type", item.Type);
             cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$file", (object?)item.FilePath ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$fdata", (object?)item.FileData ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
             cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
@@ -381,32 +376,15 @@ namespace MemoryBlackHole.Services
             return result;
         }
 
-        /// <summary>永久删除一条记忆（含媒体文件清理）。</summary>
+        /// <summary>永久删除一条记忆。</summary>
         public void PermanentDelete(long id)
         {
-            string? filePath = null;
-            using (var conn = new SqliteConnection(_connectionString))
-            {
-                conn.Open();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT FilePath FROM Items WHERE Id=$id";
-                cmd.Parameters.AddWithValue("$id", id);
-                filePath = cmd.ExecuteScalar() as string;
-            }
-            using (var conn = new SqliteConnection(_connectionString))
-            {
-                conn.Open();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "DELETE FROM Items WHERE Id=$id";
-                cmd.Parameters.AddWithValue("$id", id);
-                cmd.ExecuteNonQuery();
-            }
-            if (!string.IsNullOrEmpty(filePath) &&
-                filePath.StartsWith(_mediaDir, StringComparison.Ordinal) &&
-                File.Exists(filePath))
-            {
-                try { File.Delete(filePath); } catch { }
-            }
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM Items WHERE Id=$id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
         }
 
         /// <summary>清空回收站。</summary>
@@ -508,17 +486,6 @@ namespace MemoryBlackHole.Services
             cmd.CommandText = "SELECT Value FROM Settings WHERE Key=$key";
             cmd.Parameters.AddWithValue("$key", key);
             return cmd.ExecuteScalar() as string;
-        }
-
-        /// <summary>复制媒体文件到媒体目录，返回落盘路径。超过 maxBytes 则返回 null（改存原始路径）。
-        /// v1.0.1: maxBytes 从 200MB 缩为 100MB 改为 500MB；改用 File.Copy 流式复制。</summary>
-        public string? StoreMedia(string sourcePath, long maxBytes = 500L * 1024 * 1024)
-        {
-            var info = new FileInfo(sourcePath);
-            if (info.Length > maxBytes) return null; // 超限：不复制，落库时用原始路径
-            var dest = Path.Combine(_mediaDir, $"media_{Guid.NewGuid():N}{info.Extension}");
-            File.Copy(sourcePath, dest, true);
-            return dest;
         }
 
         /// <summary>获取所有标签及其出现次数（按次数降序）。</summary>

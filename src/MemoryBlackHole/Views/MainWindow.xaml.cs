@@ -170,14 +170,14 @@ namespace MemoryBlackHole.Views
 
             for (int i = 0; i < dialog.FilePaths.Count; i++)
             {
-                string? storedPath = _service.StoreMedia(dialog.FilePaths[i]);
+                byte[] fileData = File.ReadAllBytes(dialog.FilePaths[i]);
                 _service.Add(new MemoryItem
                 {
                     Type = dialog.SelectedType,
                     Title = dialog.OriginalFileNames[i],
                     Content = dialog.OriginalFileNames[i],
-                    FilePath = storedPath ?? dialog.FilePaths[i],
-                    FileData = null,
+                    FilePath = null,
+                    FileData = fileData,
                     Note = null,
                     Tags = dialog.Tags,
                     OriginalFileName = dialog.OriginalFileNames[i],
@@ -294,18 +294,18 @@ namespace MemoryBlackHole.Views
             }
             else
             {
-                // 非文本：用 StoreMedia 流式复制文件到 media 目录
+                // 非文本：读取文件字节直接存入 SQLite BLOB
                 for (int i = 0; i < dialog.FilePaths.Count; i++)
                 {
-                    string? storedPath = _service.StoreMedia(dialog.FilePaths[i]);
+                    byte[] fileData = File.ReadAllBytes(dialog.FilePaths[i]);
 
                     _service.Add(new MemoryItem
                     {
                         Type = dialog.SelectedType,
                         Title = dialog.OriginalFileNames[i],
                         Content = dialog.OriginalFileNames[i],
-                        FilePath = storedPath ?? dialog.FilePaths[i],
-                        FileData = null,
+                        FilePath = null,
+                        FileData = fileData,
                         Note = null,
                         Tags = dialog.Tags,
                         OriginalFileName = dialog.OriginalFileNames[i],
