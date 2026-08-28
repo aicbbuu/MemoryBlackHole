@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:models="clr-namespace:MemoryBlackHole.Models">
     <!-- 浅色主题 -->
     <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#F0F2F8" Offset="0"/>
