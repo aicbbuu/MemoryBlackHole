@@ -151,7 +151,7 @@ namespace MemoryBlackHole.Views
             if (files == null || files.Length == 0) return;
 
             // 拖入文本：按文字内容处理；拖入文件：弹出预填对话框
-            if (files.Length == 1 && string.IsNullOrEmpty(Path.GetExtension(files[0])))
+            if (files.Length == 1 && string.IsNullOrEmpty(System.IO.Path.GetExtension(files[0])))
             {
                 // 无扩展名视为文本拖入，暂不支持
                 new NoticeDialog("拖入文件", "要添加文本记忆，请在正面点击✦按钮或使用 Ctrl+N。")
