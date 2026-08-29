@@ -436,29 +436,54 @@ namespace MemoryBlackHole.Views
             catch { /* 静默 */ }
         }
 
-        /// <summary>现代化 2.5D 黑洞视觉：引力透镜式椭圆吸积盘、热光环和粒子轨道。</summary>
+        /// <summary>
+        /// 2.5D 风格化黑洞:引力透镜式椭圆吸积盘 + 光子球 + 双极喷流 + 池化粒子。
+        /// 视觉由 4 层独立旋转的椭圆环(冷热渐变描边)、事件视界暗球、辉光、双极喷流、
+        /// 以及绕轨道运行的彩色粒子组成。
+        ///
+        /// 性能策略:
+        /// - 所有 Brush / Pen / Gradient 在 Build() 阶段 Freeze(),跨线程共享且无 per-frame 分配。
+        /// - 80 颗粒子预分配在池中(对象复用),Update() 只改 Canvas 位置与 Opacity,不创建对象。
+        /// - 不使用额外的 CompositionTarget hook;由 MainWindow 统一驱动 OnRendering → Update(delta)。
+        /// - 喷发特效"借用"池中已 dead 节点,粒子死亡后回到池,GC 压力为零。
+        /// </summary>
         private sealed class SpaceCore
         {
-            private sealed class BurstParticle
-            {
-                public FrameworkElement Shape { get; }
-                public double Angle { get; }
-                public double StartRadius { get; }
-                public double EndRadius { get; }
-                public double Age { get; set; }
-                public BurstParticle(FrameworkElement shape, double angle, double startRadius, double endRadius)
-                {
-                    Shape = shape; Angle = angle; StartRadius = startRadius; EndRadius = endRadius;
-                }
-            }
+            private const int OrbitPoolSize = 60;
+            private const int BurstPoolSize = 24;
+            private const double TwoPi = Math.PI * 2.0;
 
             private readonly Canvas _canvas;
-            private readonly List<(Ellipse Ring, RotateTransform Rotate, double Speed)> _rings = new();
-            private readonly List<BurstParticle> _bursts = new();
             private readonly bool _warm;
-            private Ellipse _core = null!;
+            private readonly List<Ellipse> _rings = new();
+            private readonly List<RotateTransform> _ringRotations = new();
+            private readonly List<double> _ringSpeeds = new();
+            private Ellipse _photonRing = null!;
+            private Ellipse _eventHorizon = null!;
             private Ellipse _coreGlow = null!;
+            private Path _jetTop = null!;
+            private Path _jetBottom = null!;
+
+            private readonly List<Ellipse> _orbitPool = new();
+            private readonly double[] _orbitAngle = new double[OrbitPoolSize];
+            private readonly double[] _orbitRadius = new double[OrbitPoolSize];
+            private readonly double[] _orbitSpeed = new double[OrbitPoolSize];
+            private readonly double[] _orbitSize = new double[OrbitPoolSize];
+            private readonly double[] _orbitBaseAlpha = new double[OrbitPoolSize];
+
+            private readonly List<Ellipse> _burstPool = new();
+            private readonly double[] _burstAge = new double[BurstPoolSize];
+            private readonly double[] _burstLife = new double[BurstPoolSize];
+            private readonly double[] _burstVX = new double[BurstPoolSize];
+            private readonly double[] _burstVY = new double[BurstPoolSize];
+            private readonly double[] _burstStartX = new double[BurstPoolSize];
+            private readonly double[] _burstStartY = new double[BurstPoolSize];
+            private readonly double[] _burstBaseSize = new double[BurstPoolSize];
+            private readonly bool[] _burstAlive = new bool[BurstPoolSize];
+
             private double _time;
+            private double _pulse;
+            private double _pulseDecay;
 
             public SpaceCore(Canvas canvas, bool warm)
             {
@@ -467,103 +492,301 @@ namespace MemoryBlackHole.Views
 
             private void Build()
             {
-                AddRing(680, 158, -8, _warm ? "#FFD18A" : "#D8E7FF", 0.18, 7);
-                AddRing(610, 126, 16, _warm ? "#FF8A3D" : "#A8C7FF", -0.34, 10);
-                AddRing(535, 96, -24, _warm ? "#FFB52E" : "#E7F0FF", 0.52, 6);
-                AddRing(455, 70, 36, _warm ? "#FFF4D0" : "#B9D7FF", -0.78, 4);
-
+                // 1) 中心辉光(大软光晕,内核外侧)
                 _coreGlow = new Ellipse
                 {
-                    Width = 390, Height = 300,
-                    Fill = new RadialGradientBrush(Color.FromArgb(145, _warm ? (byte)255 : (byte)75, _warm ? (byte)74 : (byte)120, 255), Color.FromArgb(0, 0, 0, 0)),
-                    Opacity = 0.42, IsHitTestVisible = false
+                    Width = 480, Height = 360,
+                    IsHitTestVisible = false,
+                    Opacity = 0.55,
                 };
+                _coreGlow.Fill = MakeRadialGlow(_warm
+                    ? Color.FromArgb(220, 0xFF, 0x86, 0x2E)
+                    : Color.FromArgb(210, 0x6B, 0xC8, 0xFF),
+                    Color.FromArgb(0, 0, 0, 0));
+                _coreGlow.Effect = new BlurEffect { Radius = 38, KernelType = KernelType.Gaussian };
                 _canvas.Children.Add(_coreGlow);
 
-                _core = new Ellipse
+                // 2) 事件视界(中心深黑球,边缘透出 Doppler 增亮)
+                _eventHorizon = new Ellipse { Width = 200, Height = 190, IsHitTestVisible = false };
+                _eventHorizon.Fill = Freeze(new RadialGradientBrush
                 {
-                    Width = 220, Height = 210,
-                    Fill = new RadialGradientBrush(Color.FromRgb(0, 0, 1), Color.FromRgb(3, 5, 17)),
-                    Stroke = new SolidColorBrush(Color.FromArgb(210, 8, 10, 24)),
-                    StrokeThickness = 5, IsHitTestVisible = false
-                };
-                _canvas.Children.Add(_core);
+                    GradientStops = FreezeStops(new (Color, double)[]
+                    {
+                        (Color.FromRgb(0, 0, 0),         0.00),
+                        (Color.FromRgb(0, 0, 0),         0.78),
+                        (_warm ? Color.FromRgb(0xFF, 0x6A, 0x18)
+                              : Color.FromRgb(0x3E, 0xB4, 0xFF), 0.92),
+                        (Color.FromArgb(0, 0, 0, 0),    1.00),
+                    })
+                });
+                _canvas.Children.Add(_eventHorizon);
 
-                // 不显示持续环绕的彩点；黑洞只保留吸积盘和交互星星特效。
+                // 3) 光子球(最内圈细亮环,模拟弯曲光强反射)
+                _photonRing = new Ellipse
+                {
+                    Width = 244, Height = 232,
+                    Stroke = Freeze(new SolidColorBrush(
+                        _warm ? Color.FromArgb(210, 0xFF, 0xC2, 0x70)
+                              : Color.FromArgb(210, 0xB8, 0xE8, 0xFF))),
+                    StrokeThickness = 1.6,
+                    IsHitTestVisible = false,
+                    Opacity = 0.75,
+                };
+                _canvas.Children.Add(_photonRing);
+
+                // 4) 4 层吸积盘(独立旋转,椭圆压扁模拟相对论倾角)
+                AddDiskRing(680, 168,   6, _warm ? "#FFD18A" : "#D8E7FF",  0.10, 6);
+                AddDiskRing(560, 124,  12, _warm ? "#FF8A3D" : "#A8C7FF", -0.22, 7);
+                AddDiskRing(440,  86, -18, _warm ? "#FFB52E" : "#E7F0FF",  0.36, 5);
+                AddDiskRing(330,  58,  24, _warm ? "#FFF4D0" : "#B9D7FF", -0.55, 3);
+
+                // 5) 双极喷流(常驻但低不透明度,吸/吐时抬升)
+                _jetTop = MakeJetPath(40, -200, _warm);
+                _jetBottom = MakeJetPath(40, 200, _warm);
+                _canvas.Children.Add(_jetBottom);
+                _canvas.Children.Add(_jetTop);
+
+                // 6) 稳定吸积粒子池(全部预创建,运行期零分配)
+                var rng = new Random(_warm ? 17 : 113);
+                for (int i = 0; i < OrbitPoolSize; i++)
+                {
+                    var dot = new Ellipse
+                    {
+                        IsHitTestVisible = false,
+                        Effect = new BlurEffect { Radius = 4, KernelType = KernelType.Gaussian },
+                    };
+                    _orbitPool.Add(dot);
+                    _canvas.Children.Add(dot);
+                    _orbitAngle[i]     = rng.NextDouble() * TwoPi;
+                    _orbitRadius[i]    = 95 + rng.NextDouble() * 235;
+                    _orbitSpeed[i]     = 0.18 + rng.NextDouble() * 0.55;
+                    _orbitSize[i]      = 1.6 + rng.NextDouble() * 3.4;
+                    _orbitBaseAlpha[i] = 0.35 + rng.NextDouble() * 0.55;
+                    // 离视界近的偏白热,远的偏冷
+                    double t = (_orbitRadius[i] - 95.0) / 235.0;
+                    byte r = (byte)(255 * (1 - t * 0.55));
+                    byte g = (byte)(_warm ? (200 - t * 60) : (180 + t * 40));
+                    byte b = (byte)(_warm ? (90 + t * 60)  : (255 - t * 30));
+                    var brush = Freeze(new SolidColorBrush(Color.FromArgb(220, r, g, b)));
+                    dot.Fill = brush;
+                    dot.Width = dot.Height = _orbitSize[i];
+                }
+
+                // 7) 喷发池(预创建,初始不可见)
+                for (int i = 0; i < BurstPoolSize; i++)
+                {
+                    var p = new Ellipse { IsHitTestVisible = false, Opacity = 0 };
+                    p.Effect = new BlurEffect { Radius = 6, KernelType = KernelType.Gaussian };
+                    _burstPool.Add(p);
+                    _canvas.Children.Add(p);
+                    _burstAlive[i] = false;
+                }
             }
 
-            private void AddRing(double width, double height, double rotation, string color, double speed, double thickness)
+            private void AddDiskRing(double width, double height, double rotation, string color, double speed, double thickness)
             {
+                var brush = Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)));
                 var ring = new Ellipse
                 {
                     Width = width, Height = height,
-                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)),
-                    StrokeThickness = thickness, Opacity = 0.38, IsHitTestVisible = false,
+                    Stroke = brush,
+                    StrokeThickness = thickness,
+                    IsHitTestVisible = false,
+                    Opacity = 0.42,
                     RenderTransformOrigin = new Point(0.5, 0.5),
-                    RenderTransform = new RotateTransform(rotation)
+                    RenderTransform = new RotateTransform(rotation),
                 };
-                ring.Effect = new DropShadowEffect { Color = ((SolidColorBrush)ring.Stroke).Color, BlurRadius = 26, ShadowDepth = 0, Opacity = 0.72 };
+                ring.Effect = new DropShadowEffect
+                {
+                    Color = ((SolidColorBrush)ring.Stroke).Color,
+                    BlurRadius = 28,
+                    ShadowDepth = 0,
+                    Opacity = 0.55,
+                };
                 _canvas.Children.Add(ring);
-                _rings.Add((ring, (RotateTransform)ring.RenderTransform, speed));
+                _rings.Add(ring);
+                _ringRotations.Add((RotateTransform)ring.RenderTransform);
+                _ringSpeeds.Add(speed);
             }
 
-            public void PlayInward() => StartBurst(true);
-            public void PlayOutward() => StartBurst(false);
+            private static Path MakeJetPath(double halfWidth, double tipY, bool warm)
+            {
+                double h = Math.Abs(tipY) * 2;
+                var pg = new Path
+                {
+                    Width = halfWidth * 2,
+                    Height = h,
+                    IsHitTestVisible = false,
+                    Stretch = Stretch.None,
+                    Data = new RectangleGeometry(new Rect(0, 0, halfWidth * 2, h)),
+                };
+                var gradient = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0.5, tipY < 0 ? 1.0 : 0.0),
+                    EndPoint   = new Point(0.5, tipY < 0 ? 0.0 : 1.0),
+                };
+                Color hot = warm ? Color.FromRgb(0xFF, 0x9A, 0x40)
+                                 : Color.FromRgb(0x7A, 0xC8, 0xFF);
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(180, hot.R, hot.G, hot.B), 0.0));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0,   hot.R, hot.G, hot.B), 1.0));
+                Freeze(gradient);
+                pg.Fill = gradient;
+                return pg;
+            }
+
+            private static Brush MakeRadialGlow(Color inner, Color outer)
+            {
+                var brush = new RadialGradientBrush(inner, outer);
+                brush.Freeze();
+                return brush;
+            }
+
+            private static GradientStopCollection FreezeStops((Color color, double offset)[] items)
+            {
+                var col = new GradientStopCollection();
+                foreach (var (c, o) in items) col.Add(new GradientStop(c, o));
+                col.Freeze();
+                return col;
+            }
+
+            private static T Freeze<T>(T f) where T : Freezable
+            {
+                if (f.CanFreeze) f.Freeze();
+                return f;
+            }
+
+            public void PlayInward() => StartBurst(inward: true);
+            public void PlayOutward() => StartBurst(inward: false);
 
             private void StartBurst(bool inward)
             {
-                var color = _warm ? Color.FromRgb(0xFF, 0xD4, 0x72) : Color.FromRgb(0xB8, 0xE8, 0xFF);
-                var star = new TextBlock
+                // 抬升中心视界亮度
+                _pulse = 1.0;
+                _pulseDecay = 1.4;
+
+                int spawned = 0;
+                for (int i = 0; i < BurstPoolSize && spawned < 12; i++)
                 {
-                    Text = "✦",
-                    FontSize = 42,
-                    FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(color),
-                    Width = 58,
-                    Height = 58,
-                    TextAlignment = TextAlignment.Center,
-                    IsHitTestVisible = false,
-                    Effect = new DropShadowEffect
-                    { Color = color, BlurRadius = 28, ShadowDepth = 0, Opacity = 1 }
-                };
-                _canvas.Children.Add(star);
-                _bursts.Add(new BurstParticle(star, inward ? 0.15 : -0.25,
-                    inward ? 600 : 34, inward ? 34 : 620));
+                    if (_burstAlive[i]) continue;
+                    _burstAlive[i] = true;
+                    _burstAge[i] = 0;
+                    _burstLife[i] = 0.9 + (spawned * 0.04);
+                    if (inward)
+                    {
+                        // 吸入:从外向中心螺旋坍缩
+                        double a = (spawned / 12.0) * TwoPi;
+                        double r = 320 + (spawned % 3) * 18;
+                        _burstStartX[i] = Math.Cos(a) * r;
+                        _burstStartY[i] = Math.Sin(a) * r * 0.55;
+                        _burstVX[i] = -Math.Cos(a) * 380;
+                        _burstVY[i] = -Math.Sin(a) * 380 * 0.55;
+                    }
+                    else
+                    {
+                        // 吐出:从中心沿双极喷流方向爆发
+                        bool up = (spawned % 2) == 0;
+                        double spread = ((spawned % 6) / 6.0 - 0.5) * 0.35;
+                        _burstStartX[i] = spread * 40;
+                        _burstStartY[i] = up ? -8 : 8;
+                        _burstVX[i] = spread * 80;
+                        _burstVY[i] = up ? -560 : 560;
+                    }
+                    _burstBaseSize[i] = 3.0 + (spawned % 4) * 1.4;
+                    var p = _burstPool[i];
+                    p.Width = p.Height = _burstBaseSize[i];
+                    p.Fill = Freeze(new SolidColorBrush(_warm
+                        ? Color.FromRgb(0xFF, 0xC2, 0x70)
+                        : Color.FromRgb(0xB8, 0xE8, 0xFF)));
+                    p.Opacity = 0.95;
+                    spawned++;
+                }
             }
 
             public void Update(double delta)
             {
                 _time += delta;
-                double cx = _canvas.ActualWidth > 0 ? _canvas.ActualWidth / 2 : 640;
+                if (_pulse > 0) _pulse = Math.Max(0, _pulse - _pulseDecay * delta);
+                double coreGlowOpacity   = 0.55 + _pulse * 0.40;
+                double photonRingOpacity = 0.75 + _pulse * 0.25;
+                double eventGlow         = 0.85 + _pulse * 0.20;
+
+                double cx = _canvas.ActualWidth  > 0 ? _canvas.ActualWidth  / 2 : 640;
                 double cy = _canvas.ActualHeight > 0 ? _canvas.ActualHeight / 2 : 370;
-                foreach (var item in _rings)
+
+                // 1) 吸积盘 4 层独立旋转 + 上下轻微正弦漂移
+                for (int i = 0; i < _rings.Count; i++)
                 {
-                    item.Rotate.Angle += item.Speed * delta * 30;
-                    Canvas.SetLeft(item.Ring, cx - item.Ring.Width / 2);
-                    Canvas.SetTop(item.Ring, cy - item.Ring.Height / 2 + Math.Sin(_time * 0.6) * 3);
+                    _ringRotations[i].Angle += _ringSpeeds[i] * delta * 50.0;
+                    var ring = _rings[i];
+                    Canvas.SetLeft(ring, cx - ring.Width / 2);
+                    Canvas.SetTop(ring,  cy - ring.Height / 2 + Math.Sin(_time * 0.6 + i) * 2.4);
                 }
-                Canvas.SetLeft(_coreGlow, cx - _coreGlow.Width / 2);
-                Canvas.SetTop(_coreGlow, cy - _coreGlow.Height / 2);
-                Canvas.SetLeft(_core, cx - _core.Width / 2);
-                Canvas.SetTop(_core, cy - _core.Height / 2);
-                for (int i = _bursts.Count - 1; i >= 0; i--)
+
+                // 2) 中心组件居中,吸入/吐出时辉光短暂放大
+                double scale = 1.0 + _pulse * 0.10;
+                LayoutCentered(_photonRing,   cx, cy, scale);
+                LayoutCentered(_eventHorizon, cx, cy, scale);
+                _photonRing.Opacity   = Math.Min(1.0, photonRingOpacity);
+                _eventHorizon.Opacity = eventGlow;
+                LayoutCentered(_coreGlow, cx, cy, 1.0 + _pulse * 0.12);
+                _coreGlow.Opacity = coreGlowOpacity;
+
+                // 3) 双极喷流
+                double jetOpacity = 0.18 + _pulse * 0.55;
+                _jetTop.Opacity    = jetOpacity;
+                _jetBottom.Opacity = jetOpacity;
+                Canvas.SetLeft(_jetTop,    cx - _jetTop.Width    / 2);
+                Canvas.SetTop(_jetTop,     cy - _jetTop.Height);
+                Canvas.SetLeft(_jetBottom, cx - _jetBottom.Width / 2);
+                Canvas.SetTop(_jetBottom,  cy);
+
+                // 4) 稳定吸积粒子(公转 + 极慢向心 + Doppler 增亮)
+                for (int i = 0; i < OrbitPoolSize; i++)
                 {
-                    var burst = _bursts[i];
-                    burst.Age += delta;
-                    double progress = Math.Clamp(burst.Age / 1.5, 0, 1);
-                    double eased = progress * progress * (3 - 2 * progress);
-                    double radius = burst.StartRadius + (burst.EndRadius - burst.StartRadius) * eased;
-                    double x = Math.Cos(burst.Angle + _time * 0.8) * radius;
-                    double y = Math.Sin(burst.Angle + _time * 0.8) * radius * 0.52;
-                    burst.Shape.Opacity = 1 - progress;
-                    Canvas.SetLeft(burst.Shape, cx + x - burst.Shape.Width / 2);
-                    Canvas.SetTop(burst.Shape, cy + y - burst.Shape.Height / 2);
-                    if (progress >= 1)
+                    _orbitAngle[i] += _orbitSpeed[i] * delta;
+                    _orbitRadius[i] -= delta * (4 + i % 5) * 0.7;
+                    if (_orbitRadius[i] < 92)
                     {
-                        _canvas.Children.Remove(burst.Shape);
-                        _bursts.RemoveAt(i);
+                        _orbitRadius[i] = 320 + (i % 7) * 6;
                     }
+                    double r = _orbitRadius[i];
+                    double x = Math.Cos(_orbitAngle[i]) * r;
+                    double y = Math.Sin(_orbitAngle[i]) * r * 0.52;
+                    double dop = 0.5 + 0.5 * Math.Cos(_orbitAngle[i]);
+                    double a = _orbitBaseAlpha[i] * (0.45 + dop * 0.65);
+                    var dot = _orbitPool[i];
+                    dot.Opacity = a;
+                    Canvas.SetLeft(dot, cx + x - dot.Width / 2);
+                    Canvas.SetTop(dot,  cy + y - dot.Height / 2);
                 }
+
+                // 5) 喷发粒子
+                for (int i = 0; i < BurstPoolSize; i++)
+                {
+                    if (!_burstAlive[i]) continue;
+                    _burstAge[i] += delta;
+                    double t = _burstAge[i] / _burstLife[i];
+                    if (t >= 1.0)
+                    {
+                        _burstAlive[i] = false;
+                        _burstPool[i].Opacity = 0;
+                        continue;
+                    }
+                    double ease = 1 - Math.Pow(1 - t, 2);
+                    double bx = _burstStartX[i] + _burstVX[i] * ease * (0.55 * _burstLife[i]);
+                    double by = _burstStartY[i] + _burstVY[i] * ease * (0.55 * _burstLife[i]);
+                    _burstPool[i].Opacity = (1 - t) * 0.95;
+                    Canvas.SetLeft(_burstPool[i], cx + bx - _burstPool[i].Width / 2);
+                    Canvas.SetTop(_burstPool[i],  cy + by - _burstPool[i].Height / 2);
+                }
+            }
+
+            private static void LayoutCentered(FrameworkElement el, double cx, double cy, double scale)
+            {
+                double w = el.Width * scale;
+                double h = el.Height * scale;
+                Canvas.SetLeft(el, cx - w / 2);
+                Canvas.SetTop(el,  cy - h / 2);
             }
         }
     }

@@ -50,9 +50,11 @@
 - 📊 **统计面板**——一目了然查看总数、类型分布、占用空间
 - 🔒 **密码保护**——密码只存哈希，不存明文，退出后再进要重新验证
 - 💾 **纯本地**——数据存在你电脑上，程序不主动上传、不主动联网
-- 🗂 **混合存储**——接近 1 GiB 的文件可流式分块存入 SQLite 数据库；超过阈值时改为在 `.memoryblackhole/files` 保存副本，路径与元数据由 SQLite 管理（**仅 win-x64 稳定支持**；win-x86 因进程地址空间限制不再受支持）
+- 🗂 **混合存储**——900MB 内的文件可流式分块存入 SQLite 数据库；超过阈值时改为在 `.memoryblackhole/files` 保存副本，路径与元数据由 SQLite 管理
 
-> v2.1.3 起数据库启用 WAL 模式与较大的页缓存。**从 v2.1.2 之前升级的用户**，既有 `.memoryblackhole/memory.db` 保留原 `page_size`（通常为 1024 字节），`PRAGMA page_size=4096` 对已存在库是 no-op；如需获得 4 KiB 页，可先备份后删除 `memory.db` 与 `memory.db-wal` / `memory.db-shm` 再启动程序重建（历史数据会丢失）。
+> v3.0.0 BLOB 阈值为 900MB（十进制），刻意小于 SQLite 默认 `SQLITE_MAX_LENGTH=1,000,000,000` 字节（编译期常量，运行时 PRAGMA 无法提高），避免 1 GB 附近文件触发 `string or blob too big`。超过 900MB 的文件会改为本地副本，行为一致。
+
+> 早期版本数据库启用 WAL 模式与较大的页缓存。**从 v2.1.2 之前升级的用户**，既有 `.memoryblackhole/memory.db` 保留原 `page_size`（通常为 1024 字节），`PRAGMA page_size=4096` 对已存在库是 no-op；如需获得 4 KiB 页，可先备份后删除 `memory.db` 与 `memory.db-wal` / `memory.db-shm` 再启动程序重建（历史数据会丢失）。
 - ⌨️ **快捷键**——Ctrl+N 新增、Ctrl+F 搜索、Ctrl+W 关闭
 - 🖱️ **拖拽添加**——文件拖到窗口直接保存
 

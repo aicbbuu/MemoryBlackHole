@@ -59,24 +59,28 @@
                 <TextBox x:Name="ContentBox" Background="#171D30" BorderBrush="#303B59" Foreground="White"
                          Padding="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
                          VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
-                <StackPanel x:Name="FilePanel" Visibility="Collapsed">
-                    <TextBlock Text="接近 1 GiB 的文件可分块流式存入本地数据库；超过阈值时复制到本地文件目录（仅 win-x64 稳定支持）" Foreground="#AEB6CD" Margin="0,0,0,12"/>
+                <StackPanel x:Name="FilePanel" Visibility="Collapsed"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
+                    <TextBlock Text="支持图片、视频、音频和其他文件。900MB 的文件分块流式存入本地 SQLite 数据库；超过阈值文件副本保存在 .memoryblackhole/files"
+                               Foreground="#AEB6CD" FontSize="12" LineHeight="20"
+                               TextWrapping="Wrap" TextAlignment="Left"
+                               HorizontalAlignment="Stretch" Margin="0,0,0,12"/>
                     <Button Content="选择本地文件" Width="150" Height="40" HorizontalAlignment="Left"
                             Background="#6D5DF7" Foreground="White" BorderThickness="0" Cursor="Hand" Click="ChooseFile_Click"/>
                     <TextBlock x:Name="SelectedFileText" Text="尚未选择文件" Foreground="#8991A8"
-                               TextWrapping="Wrap" Margin="0,14,0,0"/>
+                               FontSize="12" TextWrapping="Wrap" TextAlignment="Left"
+                               HorizontalAlignment="Stretch" Margin="0,14,0,0"/>
                     <ListBox x:Name="FileListBox" Background="#171D30" BorderBrush="#303B59"
                              BorderThickness="1" Margin="0,8,0,0" MaxHeight="140"
                              ScrollViewer.VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
-                             Foreground="#E9ECF5" FontSize="12">
+                             Foreground="#E9ECF5" FontSize="12"
+                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding}" Padding="6,3" Foreground="#C5CBE0"/>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Text="支持图片、视频、音频和其他文件。接近 1 GiB 的数据可分块存入本地 SQLite；超过阈值时文件副本保存在 .memoryblackhole/files。"
-                               Foreground="#65708A" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0"/>
                 </StackPanel>
             </Grid>
             <StackPanel Grid.Row="4" Margin="0,14,0,18">

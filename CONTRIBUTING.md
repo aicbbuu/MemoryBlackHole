@@ -8,9 +8,9 @@
 - 自签名开发证书
 - Inno Setup 安装包
 
-> v2.1.3 起仅发布 `win-x64`。旧版同时编 `win-x86`，但 x86 进程用户地址空间仅 2~4 GB，
-> 写入几百 MB 以上的 BLOB 时 SQLite 事务极易触发 `SQLITE_NOMEM (error 7)`。
-> x64 进程地址空间充裕，同样的代码可稳定存到接近 1 GiB。
+> 当前版本仅发布 `win-x64`。旧版同时编 `win-x86`，但 x86 进程用户地址空间仅 2~4 GB，
+> 写入几百 MB 以上的 BLOB 时 SQLite 事务容易触发 `SQLITE_NOMEM (error 7)`。
+> x64 进程地址空间充裕，代码可稳定存到 900MB（十进制）以内。阈值刻意小于 SQLite 默认 `SQLITE_MAX_LENGTH=1,000,000,000` 字节，以避开编译期 BLOB 上限。
 
 ## Windows 环境准备
 
@@ -40,14 +40,14 @@ Set-ExecutionPolicy -Scope Process Bypass
 artifacts/publish/win-x64/MemoryBlackHole.exe
 artifacts/certificate/MemoryBlackHole-dev.pfx
 artifacts/certificate/MemoryBlackHole-dev.cer
-artifacts/installer/MemoryBlackHole-Setup-2.1.3-win-x64.exe
+artifacts/installer/MemoryBlackHole-Setup-3.0.0-win-x64.exe
 ```
 
 ## 证书说明
 
 这是开发/测试用自签名证书，不是受 Windows 信任的商业代码签名证书。首次在其他电脑运行时可能显示"未知发布者"。
 
-`.pfx` 包含私钥，严禁上传 GitHub 或发送给他人。
+`.pfx` 包含私钥，不要上传 GitHub 或发送给他人。
 
 自签名证书在本机通常会显示 `Unknown`，这不代表 EXE 没有签名。签名脚本会区分"签名存在但未受信任"和"签名损坏"两种情况；前者会给出警告并继续打包，后者才会终止。
 
@@ -63,8 +63,8 @@ artifacts/installer/MemoryBlackHole-Setup-2.1.3-win-x64.exe
 
 ```text
 .memoryblackhole\memory.db
-.memoryblackhole\files\        （超过 SQLite BLOB 阈值的文件副本存放目录）
-.memoryblackhole\memory.db-wal / -shm  （WAL 模式日志，v2.1.3 起启用）
+.memoryblackhole\files\        （超过 900MB BLOB 阈值的文件副本存放目录）
+.memoryblackhole\memory.db-wal / -shm  （WAL 模式日志）
 ```
 
 选择当前用户安装位置是为了让程序具备正常写入数据库的权限，避免 `Program Files` 权限问题。
