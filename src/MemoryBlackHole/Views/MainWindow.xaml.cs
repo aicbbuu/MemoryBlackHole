@@ -47,9 +47,8 @@ namespace MemoryBlackHole.Views
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
-                // 问题 4:启动不自动搜索,结果列表默认空(SearchStatus 提示用户)
-                SearchStatus.Text = "请输入关键词开始搜索";
-                ResultsList.Visibility = Visibility.Collapsed;
+                // 默认加载全部记忆(进入探索页即看到列表)
+                RefreshSearchResults();
                 CompositionTarget.Rendering += OnRendering;
 
                 // 反转探索页面滚动方向（匹配 Windows 标准行为）
@@ -397,9 +396,9 @@ namespace MemoryBlackHole.Views
 
                 if (results.Count > 0)
                 {
-                    // 问题 2:搜索命中 → 光晕变红;问题 4:结果半透明(0.55)不挡黑洞
+                    // 问题 2:搜索命中 → 光晕变红;问题 4:结果半透明(0.60)不挡黑洞
                     _backSpace.FlashRed();
-                    ResultsList.Opacity = 0.55;
+                    ResultsList.Opacity = 0.60;
                 }
 
                 // 刷新标签侧栏

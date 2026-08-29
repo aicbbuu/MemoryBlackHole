@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
-        Title="记忆黑洞" Width="400" Height="320" MinWidth="360" MinHeight="280"
+        Title="记忆黑洞" Width="1000" Height="600" MinWidth="360" MinHeight="280"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
         AllowDrop="True" Drop="Window_Drop"
@@ -294,8 +294,7 @@
                                Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
                     <ScrollViewer x:Name="ResultsScrollViewer" MaxHeight="360" VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
-                                      Visibility="Collapsed" Opacity="0.55"
-                                      MouseDoubleClick="ResultsList_MouseDoubleClick"/>
+                                      Opacity="0.60" MouseDoubleClick="ResultsList_MouseDoubleClick"/>
                     </ScrollViewer>
                 </StackPanel>
             </Grid>
