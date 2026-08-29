@@ -725,8 +725,8 @@ namespace MemoryBlackHole.Views
                     StartPoint = new Point(0.5, tipY < 0 ? 1.0 : 0.0),
                     EndPoint   = new Point(0.5, tipY < 0 ? 0.0 : 1.0),
                 };
-                Color hot = warm ? Color.FromArgb(0xFF, 0x9A, 0x40)
-                                 : Color.FromArgb(0x7A, 0xC8, 0xFF);
+                Color hot = warm ? Color.FromArgb(0xFF, 0x9A, 0x40, 0x20)
+                                 : Color.FromArgb(0xFF, 0x7A, 0xC8, 0xFF);
                 // 关键:根部 alpha 0(不画竖条),中段 alpha 100(柔和),顶端 alpha 0
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0,   hot.R, hot.G, hot.B), 0.0));
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0,   hot.R, hot.G, hot.B), 0.20));
