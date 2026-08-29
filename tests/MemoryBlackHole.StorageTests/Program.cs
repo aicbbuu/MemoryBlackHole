@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 using MemoryBlackHole.Models;
 using MemoryBlackHole.Services;
 
@@ -51,6 +52,77 @@ async Task RunAsync()
 
     service.Delete(large.Id);
     Assert(!File.Exists(large.FilePath), "Deleting an external-file item must remove its managed copy.");
+
+    // v2.1.3: 大文件分块写入+读回完整性测试。
+    // 默认关闭,避免日常开发/CI 写 800 MB。设置 MBH_LARGE_TEST=1 启用。
+    var enableLarge = string.Equals(
+        Environment.GetEnvironmentVariable("MBH_LARGE_TEST"),
+        "1", StringComparison.Ordinal);
+    if (enableLarge)
+    {
+        await RunLargeBlobRoundtripAsync(root, dataDirectory, 300); // 300 MiB
+        await RunLargeBlobRoundtripAsync(root, dataDirectory, 500); // 500 MiB
+        Console.WriteLine("PASS: 300 MiB / 500 MiB chunked-write + readback roundtrip verified via SHA-256.");
+    }
+    else
+    {
+        Console.WriteLine("SKIP: large blob roundtrip test (set MBH_LARGE_TEST=1 to enable).");
+    }
+}
+
+static async Task RunLargeBlobRoundtripAsync(string root, string dataDirectory, int sizeMiB)
+{
+    var largeDataDir = Path.Combine(root, $"data-{sizeMiB}m");
+    var largeSourceDir = Path.Combine(root, $"source-{sizeMiB}m");
+    Directory.CreateDirectory(largeSourceDir);
+
+    var sourcePath = Path.Combine(largeSourceDir, $"random-{sizeMiB}m.bin");
+
+    // 1) 写随机数据到临时源文件,记下 SHA-256。
+    var sourceHash = await WriteRandomFileAsync(sourcePath, sizeMiB);
+    var sourceSize = new FileInfo(sourcePath).Length;
+    Console.WriteLine($"  · 生成 {sizeMiB} MiB 随机源文件, SHA-256={sourceHash[..16]}..., 字节数={sourceSize}");
+
+    // 2) 默认阈值 1 GiB,文件必然走 AddBlobFile(分块写 BLOB)路径。
+    var service = new DataService(largeDataDir);
+
+    var item = NewFileItem(Path.GetFileName(sourcePath), sourceSize);
+    service.AddFile(item, sourcePath);
+    Assert(item.Id > 0, $"[{sizeMiB} MiB] Insert did not return an ID.");
+    Assert(item.FilePath is null, $"[{sizeMiB} MiB] Should be stored as BLOB, not external copy.");
+    Assert(service.HasBlobData(item.Id), $"[{sizeMiB} MiB] BLOB was not stored.");
+
+    // 3) ExtractBlobToFile 读回到新文件,比对 SHA-256。
+    var extractedPath = Path.Combine(root, $"extracted-{sizeMiB}m.bin");
+    if (File.Exists(extractedPath)) File.Delete(extractedPath);
+    service.ExtractBlobToFile(item.Id, extractedPath);
+    var extractedHash = Hash(extractedPath);
+    var extractedSize = new FileInfo(extractedPath).Length;
+    Console.WriteLine($"  · 读回 {sizeMiB} MiB BLOB,    SHA-256={extractedHash[..16]}..., 字节数={extractedSize}");
+
+    Assert(extractedSize == sourceSize, $"[{sizeMiB} MiB] Size mismatch after readback.");
+    Assert(extractedHash == sourceHash, $"[{sizeMiB} MiB] SHA-256 mismatch after chunked write + readback.");
+
+    // 4) 清理,免得下一个尺寸测试的库文件互相干扰。
+    service.Delete(item.Id);
+}
+
+static async Task<string> WriteRandomFileAsync(string path, int sizeMiB)
+{
+    const int chunkSize = 4 * 1024 * 1024; // 4 MiB
+    using var rng = RandomNumberGenerator.Create();
+    long total = (long)sizeMiB * 1024 * 1024;
+    using var fs = File.Create(path);
+    byte[] buffer = new byte[chunkSize];
+    long written = 0;
+    while (written < total)
+    {
+        int toWrite = (int)Math.Min(buffer.Length, total - written);
+        rng.GetBytes(buffer, 0, toWrite);
+        await fs.WriteAsync(buffer, 0, toWrite);
+        written += toWrite;
+    }
+    return Hash(path);
 }
 
 static MemoryItem NewFileItem(string name, long size) => new()

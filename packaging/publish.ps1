@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $ProjectDir = Join-Path $PSScriptRoot '..\src\MemoryBlackHole'
 $ProjectDir = [IO.Path]::GetFullPath($ProjectDir)
-$PublishDir = Join-Path $PSScriptRoot '..\artifacts\publish\win-x86'
+$PublishDir = Join-Path $PSScriptRoot '..\artifacts\publish\win-x64'
 $PublishDir = [IO.Path]::GetFullPath($PublishDir)
 
 Write-Host 'Restoring dependencies...'
@@ -9,9 +9,9 @@ dotnet restore $ProjectDir
 if (Test-Path $PublishDir) { Remove-Item $PublishDir -Recurse -Force }
 New-Item $PublishDir -ItemType Directory -Force | Out-Null
 
-Write-Host 'Publishing self-contained Windows x86 single-file EXE...'
+Write-Host 'Publishing self-contained Windows x64 single-file EXE...'
 dotnet publish (Join-Path $ProjectDir 'MemoryBlackHole.csproj') `
-  -c Release -r win-x86 --self-contained true `
+  -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -p:DebugType=None -p:DebugSymbols=false `

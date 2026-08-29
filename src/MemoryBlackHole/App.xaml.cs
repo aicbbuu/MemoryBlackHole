@@ -22,7 +22,7 @@ namespace MemoryBlackHole
 
             Log("=== MemoryBlackHole 启动 ===");
 
-            // 全局异常捕获：任何未处理异常都【记录到日志文件 + 弹窗】，绝不用 Handled=true 吞掉。
+            // 全局异常捕获：任何未处理异常都【记录到日志文件 + 弹窗】，不会用 Handled=true 吞掉。
             DispatcherUnhandledException += (_, args) =>
             {
                 Log("DispatcherUnhandledException: " + args.Exception);

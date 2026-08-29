@@ -1,6 +1,6 @@
 #define AppName "MemoryBlackHole"
 #define AppDisplayName "记忆黑洞"
-#define AppVersion "2.1.2"
+#define AppVersion "2.1.3"
 #define AppPublisher "vicz"
 #define AppExeName "MemoryBlackHole.exe"
 
@@ -13,7 +13,7 @@ AppPublisherURL=https://github.com/
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppDisplayName}
 OutputDir=..\artifacts\installer
-OutputBaseFilename=MemoryBlackHole-Setup-{#AppVersion}-win-x86
+OutputBaseFilename=MemoryBlackHole-Setup-{#AppVersion}-win-x64
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -23,7 +23,7 @@ UninstallDisplayName={#AppDisplayName}
 SetupLogging=yes
 
 [Files]
-Source: "..\artifacts\publish\win-x86\MemoryBlackHole.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\artifacts\publish\win-x64\MemoryBlackHole.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\COPYRIGHT.md"; DestDir: "{app}"; Flags: ignoreversion
 

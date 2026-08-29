@@ -13,12 +13,27 @@ namespace MemoryBlackHole.Services
     /// <summary>
     /// 本地存储服务：SQLite 存元数据 + FTS5 全文索引。
     /// 数据全部落在 EXE 同目录 .memoryblackhole/ 下，纯本地、无云端。
-    /// 文件≤1GiB 时流式存入 SQLite BLOB，超过时保存本地副本路径；中文搜索 LIKE；回收站+导出导入。
+    /// 文件 ≤ <see cref="LargeFileThreshold"/> 时流式分块写入 SQLite BLOB；
+    /// 超过时复制到 .memoryblackhole/files/，数据库只保存路径。
+    /// v2.1.3: 连接串统一走 <see cref="BuildConnectionString"/>，并通过 PRAGMA
+    ///   开启 WAL / 调大 cache_size / 启用 mmap_size，降低大事务的内存峰值，
+    ///   避免在 win-x64 下写入几百 MB BLOB 时仍触发 SQLITE_NOMEM。
+    ///   注意：本项目只发布 win-x64；win-x86 因地址空间限制不再支持大 BLOB。
     /// </summary>
     public class DataService
     {
         /// <summary>单个 SQLite BLOB 的最大文件大小；超过此大小改为外部副本。</summary>
         public const long LargeFileThreshold = 1L * 1024 * 1024 * 1024; // 1 GiB
+
+        /// <summary>BLOB 写入时的内存拷贝分块大小（4 MiB）。</summary>
+        internal const int BlobChunkSize = 4 * 1024 * 1024;
+
+        // PRAGMA 数值集中放置，便于统一调整。cache_size 单位是"页"或"KB"，
+        // 负值表示 KB 绝对值；这里取 -65536 ≈ 64 MiB 的页缓存。
+        private const int CacheSizeKB = -65536;
+        // mmap_size 单位字节；30 GiB 是个安全上界(64-bit 下),够大但不会过度提交。
+        private const long MmapSizeBytes = 30L * 1024 * 1024 * 1024;
+        private const int PageSizeBytes = 4096;
 
         private readonly string _dbPath;
         private readonly string _connectionString;
@@ -46,14 +61,49 @@ namespace MemoryBlackHole.Services
             _fileStoreDir = Path.Combine(dataDir, "files");
             Directory.CreateDirectory(_fileStoreDir);
 
-            _connectionString = $"Data Source={_dbPath}";
+            _connectionString = BuildConnectionString(_dbPath);
             Init();
+        }
+
+        /// <summary>
+        /// 构造连接串。Pool=True 配合共享缓存(Shared Cache)让 PRAGMA 跨连接生效。
+        /// 关键 PRAGMA(wal/cache_size/mmap_size/page_size)在 <see cref="OpenAndConfigure"/>
+        /// 中针对每个连接重新设置，避免复用连接时设置丢失。
+        /// </summary>
+        internal static string BuildConnectionString(string dbPath)
+        {
+            return new SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Cache = SqliteCacheMode.Shared,
+                Pooling = true
+            }.ToString();
+        }
+
+        /// <summary>
+        /// 打开连接并应用 PRAGMA。WAL 模式下 cache_size 作用于所有连接；
+        /// mmap_size 是 per-connection, 必须每次都设。page_size 只能在建库前设,
+        /// 已有库时 SQLITE 会忽略,所以这里也安全无副作用。
+        /// </summary>
+        private static void OpenAndConfigure(SqliteConnection conn)
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $@"
+                PRAGMA journal_mode = WAL;
+                PRAGMA synchronous  = NORMAL;
+                PRAGMA cache_size   = {CacheSizeKB};
+                PRAGMA mmap_size    = {MmapSizeBytes};
+                PRAGMA page_size    = {PageSizeBytes};
+                PRAGMA temp_store   = MEMORY;";
+            cmd.ExecuteNonQuery();
         }
 
         private void Init()
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
 
             // 主表
             using (var cmd = conn.CreateCommand())
@@ -152,7 +202,7 @@ namespace MemoryBlackHole.Services
         public long Add(MemoryItem item)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 INSERT INTO Items(Type, Title, Content, FilePath, FileData,
@@ -175,8 +225,8 @@ namespace MemoryBlackHole.Services
         }
 
         /// <summary>
-        /// 新增一条文件类记忆。≤1GiB 的文件通过 SqliteBlob 流式写入 SQLite；
-        /// 超过 1GiB 时才复制到 .memoryblackhole/files/，数据库保存该副本路径。
+        /// 新增一条文件类记忆。文件大小不超过阈值时通过 SqliteBlob 分块流式写入 SQLite；
+        /// 超过阈值时复制到 .memoryblackhole/files/，数据库只保存副本路径。
         /// </summary>
         public void AddFile(MemoryItem item, string sourcePath)
         {
@@ -192,10 +242,19 @@ namespace MemoryBlackHole.Services
             AddExternalFile(item, sourcePath);
         }
 
+        /// <summary>
+        /// 把 ≤ <see cref="_largeFileThreshold"/> 的文件流式分块写入 SQLite BLOB。
+        /// 关键点：
+        /// 1) 用 zeroblob($size) 预占空间，再通过 SqliteBlob 增量写入，避免整块加载到内存。
+        /// 2) 显式 4 MiB 分块循环 Write，不依赖 SqliteBlob.CopyTo 的隐式分块。
+        ///    大 BLOB 在 commit 阶段容易触发 SQLITE_NOMEM(7)，分块更稳。
+        /// 3) WAL 模式下大写事务 commit 后做一次 PRAGMA wal_checkpoint(PASSIVE)，
+        ///    把 WAL 帧落盘、释放页缓存，避免下一次写入继续累积导致 OOM。
+        /// </summary>
         private void AddBlobFile(MemoryItem item, string sourcePath)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var transaction = conn.BeginTransaction();
             try
             {
@@ -214,13 +273,35 @@ namespace MemoryBlackHole.Services
                     item.Id = (long)cmd.ExecuteScalar()!;
                 }
 
-                // Microsoft.Data.Sqlite 官方支持的增量 BLOB API：只保留 CopyTo 的缓冲区于内存。
+                // 显式分块写入：input.Read(buffer) → output.Write(buffer, 0, read)
+                // 4 MiB 是经验值：既减少 I/O 次数,也保证单次页缓冲在 win-x64 下不会爆。
                 using (var input = File.OpenRead(sourcePath))
                 using (var output = new SqliteBlob(conn, "Items", "FileData", item.Id, readOnly: false))
                 {
-                    input.CopyTo(output, 1024 * 1024); // 1MiB buffer
+                    byte[] buffer = new byte[BlobChunkSize];
+                    long written = 0;
+                    int read;
+                    while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        output.Write(buffer, 0, read);
+                        written += read;
+                    }
+                    if (written != item.FileSizeBytes)
+                        throw new IOException($"BLOB 写入不完整: 期望 {item.FileSizeBytes} 字节, 实际 {written} 字节。");
                 }
+
                 transaction.Commit();
+
+                // 大 BLOB commit 后把 WAL 帧落盘,降低后续写入的内存峰值。
+                // checkpoint 失败不应中断主流程,所以单独 try。
+                try
+                {
+                    using var cp = conn.CreateCommand();
+                    cp.CommandText = "PRAGMA wal_checkpoint(PASSIVE);";
+                    cp.ExecuteNonQuery();
+                }
+                catch { /* checkpoint 是优化,失败无所谓 */ }
+
                 item.FilePath = null;
                 item.FileData = null;
             }
@@ -240,7 +321,7 @@ namespace MemoryBlackHole.Services
             try
             {
                 using var conn = new SqliteConnection(_connectionString);
-                conn.Open();
+                OpenAndConfigure(conn);
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = @"
                     INSERT INTO Items(Type, Title, Content, FilePath, FileData,
@@ -281,7 +362,7 @@ namespace MemoryBlackHole.Services
         {
             var result = new List<MemoryItem>();
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
 
             string sql;
             using var cmd = conn.CreateCommand();
@@ -397,7 +478,7 @@ namespace MemoryBlackHole.Services
                 public bool HasPassword()
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT COUNT(*) FROM Settings WHERE Key='password_hash'";
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
@@ -425,7 +506,7 @@ namespace MemoryBlackHole.Services
         public void Update(MemoryItem item)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "UPDATE Items SET Title=$title, Content=$content, Note=$note, Tags=$tags WHERE Id=$id";
             cmd.Parameters.AddWithValue("$id", item.Id);
@@ -440,7 +521,7 @@ namespace MemoryBlackHole.Services
         public void Delete(long id)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
 
             // 先查询外部文件路径（仅当是外部存储时）
             string? externalPath = null;
@@ -470,7 +551,7 @@ namespace MemoryBlackHole.Services
         public bool IsExternalFile(long id)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT COUNT(*) FROM Items WHERE Id=$id AND FileData IS NULL AND FilePath IS NOT NULL";
             cmd.Parameters.AddWithValue("$id", id);
@@ -481,7 +562,7 @@ namespace MemoryBlackHole.Services
         public bool HasBlobData(long id)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT COUNT(*) FROM Items WHERE Id=$id AND FileData IS NOT NULL";
             cmd.Parameters.AddWithValue("$id", id);
@@ -492,7 +573,7 @@ namespace MemoryBlackHole.Services
         public void ExtractBlobToFile(long id, string outputPath)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT FileData FROM Items WHERE Id=$id";
             cmd.Parameters.AddWithValue("$id", id);
@@ -513,7 +594,7 @@ namespace MemoryBlackHole.Services
         private void SaveSetting(string key, string value)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "INSERT INTO Settings(Key,Value) VALUES($key,$value) ON CONFLICT(Key) DO UPDATE SET Value=$value";
             cmd.Parameters.AddWithValue("$key", key);
@@ -524,7 +605,7 @@ namespace MemoryBlackHole.Services
         private string? ReadSetting(string key)
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT Value FROM Settings WHERE Key=$key";
             cmd.Parameters.AddWithValue("$key", key);
@@ -536,7 +617,7 @@ namespace MemoryBlackHole.Services
         {
             var result = new Dictionary<string, int>();
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT Tags FROM Items WHERE Tags IS NOT NULL AND Tags != ''";
             using var rd = cmd.ExecuteReader();
@@ -559,7 +640,7 @@ namespace MemoryBlackHole.Services
         public (int Total, int Text, int Image, int Audio, int Video, int File, long TotalSizeBytes) GetStats()
         {
             using var conn = new SqliteConnection(_connectionString);
-            conn.Open();
+            OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 SELECT Type, COUNT(*), COALESCE(SUM(FileSizeBytes), 0)

@@ -8,16 +8,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MemoryBlackHole</RootNamespace>
     <AssemblyName>MemoryBlackHole</AssemblyName>
-    <Version>2.1.2</Version>
-    <AssemblyVersion>2.1.2.0</AssemblyVersion>
-    <FileVersion>2.1.2.0</FileVersion>
-    <InformationalVersion>2.1.2</InformationalVersion>
+    <Version>2.1.3</Version>
+    <AssemblyVersion>2.1.3.0</AssemblyVersion>
+    <FileVersion>2.1.3.0</FileVersion>
+    <InformationalVersion>2.1.3</InformationalVersion>
     <Authors>vicz</Authors>
     <Company>vicz</Company>
     <Product>记忆黑洞</Product>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <!-- x86 目标: 配上 RuntimeIdentifier 后 dotnet publish 出 x86 单文件 -->
-    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
+    <!-- v2.1.3: 仅发布 win-x64。
+         旧版同时编 win-x86 / win-x64, 但 x86 进程用户地址空间 2~4 GB,
+         写入几百 MB 以上的 BLOB 时 SQLite 事务极易触发 SQLITE_NOMEM(error 7)。
+         x64 下进程地址空间充裕, 同样的代码可稳定存到接近 1 GiB。 -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

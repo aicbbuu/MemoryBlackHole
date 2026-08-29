@@ -60,7 +60,7 @@
                          Padding="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
                          VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
                 <StackPanel x:Name="FilePanel" Visibility="Collapsed">
-                    <TextBlock Text="≤1GB 文件将流式保存到本地数据库；超过 1GB 则复制到本地文件目录" Foreground="#AEB6CD" Margin="0,0,0,12"/>
+                    <TextBlock Text="接近 1 GiB 的文件可分块流式存入本地数据库；超过阈值时复制到本地文件目录（仅 win-x64 稳定支持）" Foreground="#AEB6CD" Margin="0,0,0,12"/>
                     <Button Content="选择本地文件" Width="150" Height="40" HorizontalAlignment="Left"
                             Background="#6D5DF7" Foreground="White" BorderThickness="0" Cursor="Hand" Click="ChooseFile_Click"/>
                     <TextBlock x:Name="SelectedFileText" Text="尚未选择文件" Foreground="#8991A8"
@@ -75,7 +75,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Text="支持图片、视频、音频和其他文件。≤1GB 数据存入本地 SQLite；超过 1GB 时文件副本保存在 .memoryblackhole/files。"
+                    <TextBlock Text="支持图片、视频、音频和其他文件。接近 1 GiB 的数据可分块存入本地 SQLite；超过阈值时文件副本保存在 .memoryblackhole/files。"
                                Foreground="#65708A" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0"/>
                 </StackPanel>
             </Grid>

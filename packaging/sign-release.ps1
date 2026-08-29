@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$Exe = Join-Path $Root 'artifacts\publish\win-x86\MemoryBlackHole.exe'
+$Exe = Join-Path $Root 'artifacts\publish\win-x64\MemoryBlackHole.exe'
 $Pfx = Join-Path $Root 'artifacts\certificate\MemoryBlackHole-dev.pfx'
-if (-not (Test-Path $Exe)) { throw "EXE not found. Run publish-x86.ps1 first: $Exe" }
+if (-not (Test-Path $Exe)) { throw "EXE not found. Run publish.ps1 first: $Exe" }
 if (-not (Test-Path $Pfx)) { throw "Certificate not found. Run create-self-signed-cert.ps1 first: $Pfx" }
 
 $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source

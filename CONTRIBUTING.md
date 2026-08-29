@@ -2,15 +2,19 @@
 
 ## 目标
 
-- Windows x86
+- Windows x64
 - .NET 8 self-contained
 - 单文件 EXE
 - 自签名开发证书
 - Inno Setup 安装包
 
+> v2.1.3 起仅发布 `win-x64`。旧版同时编 `win-x86`，但 x86 进程用户地址空间仅 2~4 GB，
+> 写入几百 MB 以上的 BLOB 时 SQLite 事务极易触发 `SQLITE_NOMEM (error 7)`。
+> x64 进程地址空间充裕，同样的代码可稳定存到接近 1 GiB。
+
 ## Windows 环境准备
 
-1. 安装 .NET 8 SDK（x64 SDK 可以发布 x86）。
+1. 安装 .NET 8 SDK（x64）。
 2. 安装 Windows SDK（提供 `signtool.exe`）。
 3. 安装 Inno Setup（提供 `ISCC.exe`）。
 
@@ -25,7 +29,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 脚本会依次：
 
-1. 发布 `win-x86` self-contained 单文件 EXE；
+1. 发布 `win-x64` self-contained 单文件 EXE；
 2. 首次运行时创建本地开发自签名证书；
 3. 使用 SHA-256 签署 EXE，并执行签名验证；
 4. 编译 Inno Setup 安装包。
@@ -33,10 +37,10 @@ Set-ExecutionPolicy -Scope Process Bypass
 产物位置：
 
 ```text
-artifacts/publish/win-x86/MemoryBlackHole.exe
+artifacts/publish/win-x64/MemoryBlackHole.exe
 artifacts/certificate/MemoryBlackHole-dev.pfx
 artifacts/certificate/MemoryBlackHole-dev.cer
-artifacts/installer/MemoryBlackHole-Setup-2.0.2-win-x86.exe
+artifacts/installer/MemoryBlackHole-Setup-2.1.3-win-x64.exe
 ```
 
 ## 证书说明
@@ -59,7 +63,8 @@ artifacts/installer/MemoryBlackHole-Setup-2.0.2-win-x86.exe
 
 ```text
 .memoryblackhole\memory.db
-.memoryblackhole\files\        （超过 1GB 的文件副本存放目录）
+.memoryblackhole\files\        （超过 SQLite BLOB 阈值的文件副本存放目录）
+.memoryblackhole\memory.db-wal / -shm  （WAL 模式日志，v2.1.3 起启用）
 ```
 
 选择当前用户安装位置是为了让程序具备正常写入数据库的权限，避免 `Program Files` 权限问题。

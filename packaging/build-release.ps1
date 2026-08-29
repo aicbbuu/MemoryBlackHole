@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 
-& (Join-Path $PSScriptRoot 'publish-x86.ps1')
+& (Join-Path $PSScriptRoot 'publish.ps1')
 if (-not (Test-Path (Join-Path $Root 'artifacts\certificate\MemoryBlackHole-dev.pfx'))) {
     & (Join-Path $PSScriptRoot 'create-self-signed-cert.ps1')
 }

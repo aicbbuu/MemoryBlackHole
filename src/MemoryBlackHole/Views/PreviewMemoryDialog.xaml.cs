@@ -78,7 +78,7 @@ namespace MemoryBlackHole.Views
                 return _tempPreview;
             }
 
-            // 情况2：外部文件（>1GB 的存储方式）
+            // 情况2：外部文件（超过 SQLite BLOB 阈值的存储方式）
             if (_item.FilePath != null && File.Exists(_item.FilePath))
                 return _item.FilePath;
 
