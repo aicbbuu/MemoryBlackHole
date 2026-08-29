@@ -266,13 +266,6 @@
                     <Rectangle Height="1" Fill="#20263A" Margin="0,10,0,10"/>
                     <TextBlock x:Name="StatsText" Text="加载中…" FontSize="11"
                                Foreground="#68748F" TextWrapping="Wrap"/>
-                    <!-- 操作按钮 -->
-                    <Button Content="🗑 回收站" Style="{StaticResource PillButton}" FontSize="11"
-                            HorizontalAlignment="Left" Margin="0,8,0,0" Click="RecycleBin_Click"/>
-                    <Button Content="📤 导出" Style="{StaticResource PillButton}" FontSize="11"
-                            HorizontalAlignment="Left" Margin="0,6,0,0" Click="Export_Click"/>
-                    <Button Content="📥 导入" Style="{StaticResource PillButton}" FontSize="11"
-                            HorizontalAlignment="Left" Margin="0,6,0,0" Click="Import_Click"/>
                 </StackPanel>
                 <!-- 右侧：搜索 + 结果 -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Top">

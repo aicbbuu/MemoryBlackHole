@@ -36,7 +36,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 artifacts/publish/win-x86/MemoryBlackHole.exe
 artifacts/certificate/MemoryBlackHole-dev.pfx
 artifacts/certificate/MemoryBlackHole-dev.cer
-artifacts/installer/MemoryBlackHole-Setup-2.0.0-win-x86.exe
+artifacts/installer/MemoryBlackHole-Setup-2.0.2-win-x86.exe
 ```
 
 ## 证书说明
