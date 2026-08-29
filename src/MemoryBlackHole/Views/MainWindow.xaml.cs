@@ -450,7 +450,7 @@ namespace MemoryBlackHole.Views
         private sealed class SpaceCore
         {
             private const int OrbitPoolSize = 60;
-            private const int TwoPi = Math.PI * 2.0;
+            private const double TwoPi = Math.PI * 2.0;
 
             // 整体尺寸缩放系数(v3.0.1):1.0 是基线,放大后 BlurEffect 仍会糊。
             // 用户在第 4 轮反馈"放大 1.5x 后还是很糊",这里固定 1.0,
