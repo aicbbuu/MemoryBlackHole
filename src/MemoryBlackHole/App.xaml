@@ -80,6 +80,35 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- 全局暗色滚动条样式 -->
+            <Style TargetType="ScrollBar">
+                <Setter Property="Background" Value="#171D30"/>
+                <Setter Property="Foreground" Value="#2A3360"/>
+                <Setter Property="Width" Value="8"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="#171D30">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Track x:Name="PART_Track" Grid.Row="0">
+                                    <Track.Thumb>
+                                        <Thumb Background="#2A3360" BorderThickness="0"
+                                               CornerRadius="4" Width="6" Height="Auto"/>
+                                    </Track.Thumb>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style TargetType="ScrollViewer">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="#2A3360"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

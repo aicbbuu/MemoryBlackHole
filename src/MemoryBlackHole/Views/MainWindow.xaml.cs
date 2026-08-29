@@ -38,8 +38,7 @@ namespace MemoryBlackHole.Views
             catch (Exception ex)
             {
                 _service = null;
-                MessageBox.Show("数据库初始化失败：" + ex.Message,
-                    "记忆黑洞", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ConfirmDialog.ShowInfo("数据库初始化失败", "数据库初始化失败：" + ex.Message, this);
             }
 
             Loaded += (_, _) =>

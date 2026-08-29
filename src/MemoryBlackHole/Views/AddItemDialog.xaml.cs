@@ -149,7 +149,7 @@ namespace MemoryBlackHole.Views
                 ContentText = ContentBox.Text?.Trim() ?? "";
                 if (string.IsNullOrWhiteSpace(ContentText))
                 {
-                    MessageBox.Show("请输入文本内容", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ConfirmDialog.ShowInfo("丢进黑洞", "请输入文本内容", this);
                     return;
                 }
             }
@@ -158,18 +158,18 @@ namespace MemoryBlackHole.Views
                 ContentText = ContentBox.Text?.Trim() ?? "";
                 if (string.IsNullOrWhiteSpace(ContentText))
                 {
-                    MessageBox.Show("请输入链接地址", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ConfirmDialog.ShowInfo("丢进黑洞", "请输入链接地址", this);
                     return;
                 }
                 if (!ContentText.StartsWith("http://") && !ContentText.StartsWith("https://"))
                 {
-                    MessageBox.Show("链接必须以 http:// 或 https:// 开头", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ConfirmDialog.ShowInfo("丢进黑洞", "链接必须以 http:// 或 https:// 开头", this);
                     return;
                 }
             }
             else if (FilePaths.Count == 0)
             {
-                MessageBox.Show("请先点击\u201C选择本地文件\u201D", "丢进黑洞", MessageBoxButton.OK, MessageBoxImage.Information);
+                ConfirmDialog.ShowInfo("丢进黑洞", "请先点击「选择本地文件」按钮", this);
                 return;
             }
 
