@@ -449,91 +449,82 @@ namespace MemoryBlackHole.Views
         /// </summary>
         private sealed class SpaceCore
         {
-            private const int OrbitPoolSize = 60;
-            private const double TwoPi = Math.PI * 2.0;
+            // 整体尺寸缩放(v3.0.4):1.25x 适度放大,所有元素按此基准矢量缩放。
+            // 关键:绝对不用 BlurEffect(1.5x 那次用户嫌糊,根因就是 BlurEffect 位图后处理)。
+            // 辉光用 RadialGradientBrush 即可,主体轮廓保持矢量锐利。
+            private const double SizeScale = 1.25;
 
-            // 整体尺寸缩放系数(v3.0.1):1.0 是基线,放大后 BlurEffect 仍会糊。
-            // 用户在第 4 轮反馈"放大 1.5x 后还是很糊",这里固定 1.0,
-            // 所有视觉元素按 1:1 像素级清晰渲染。
-            private const double SizeScale = 1.0;
+            // 事件视界(纯黑实心,无 BlurEffect / 无渐变)
+            private const double EventW    = 180 * SizeScale;
+            private const double EventH    = 180 * SizeScale;
+            // 中心光晕(暖/冷径向渐变,无模糊 — 渐变本身就是软光晕)
+            private const double HaloW     = 460 * SizeScale;
+            private const double HaloH     = 460 * SizeScale;
+            // 光子球(锐利细亮环,无模糊,描边清晰)
+            private const double PhotonW   = 220 * SizeScale;
+            private const double PhotonH   = 220 * SizeScale;
+            // 单层柔光吸积盘(无旋转、无模糊)
+            private const double DiskW     = 600 * SizeScale;
+            private const double DiskH     = 600 * SizeScale;
 
-            // 事件视界(纯黑实心球 — 不透出任何背景,不加 BlurEffect,不加渐变)
-            private const double EventW    = 180;
-            private const double EventH    = 180;
-            // 中心光晕(暖/冷径向渐变,无模糊)
-            private const double HaloW     = 460;
-            private const double HaloH     = 460;
-            // 光子球(锐利细亮环,无模糊)
-            private const double PhotonW   = 220;
-            private const double PhotonH   = 220;
-            // 单层柔光吸积盘(无旋转,无模糊)
-            private const double DiskW     = 600;
-            private const double DiskH     = 600;
+            // 吸积粒子轨道半径(放大 1.25x,范围更广)
+            private const double OrbitRInner = 110 * SizeScale;     // 视界外缘
+            private const double OrbitROuter = 360 * SizeScale;     // 外圈出生半径
+            // 喷发粒子(吸/吐)轨道(放大 1.25x)
+            private const double BurstRInner = 110 * SizeScale;
+            private const double BurstROuter = 340 * SizeScale;
+            // 喷发拖尾节点数
+            private const int BurstTrailLen = 12;
 
-            // 吸积粒子轨道半径
-            private const double OrbitRInner = 90;        // 视界外缘(粒子消失半径)
-            private const double OrbitROuter = 290;       // 粒子出生半径
-            // 行星(三行星)轨道
-            private const double PlanetRInner = 100;
-            private const double PlanetROuter = 260;
-            // 行星拖尾节点数
-            private const int PlanetTrailLen = 36;        // 3 圈 × 12 节点/圈 ≈ 3 圈轨迹
-
-            // 喷发粒子(吸/吐临时) — 池大小
+            // 吸积粒子数量(60→100,密度提升 + 范围更大)
+            private const int OrbitPoolSize = 100;
+            // 喷发粒子(吸/吐)池大小
             private const int BurstPoolSize = 18;
 
             private readonly Canvas _canvas;
             private readonly bool _warm;
 
-            // 中心结构:halo 在最底,事件视界纯黑在上,光子球最上(描边不模糊)
+            // 中心结构
             private Ellipse _halo = null!;
             private Ellipse _disk = null!;
             private Ellipse _eventHorizon = null!;
             private Ellipse _photonRing = null!;
             private Ellipse _shockwave = null!;
 
-            // 吸积粒子池(60 颗,向内螺旋,无模糊)
+            // 吸积粒子池(100 颗,对数螺线向内 + 开普勒式角速度)
             private readonly List<Ellipse> _orbitPool = new();
             private readonly double[] _orbitAngle = new double[OrbitPoolSize];
             private readonly double[] _orbitRadius = new double[OrbitPoolSize];
             private readonly double[] _orbitSpeed = new double[OrbitPoolSize];
             private readonly double[] _orbitSize = new double[OrbitPoolSize];
             private readonly double[] _orbitBaseAlpha = new double[OrbitPoolSize];
+            // 螺旋收缩率(每颗不同,产生层次感)
+            private readonly double[] _orbitShrink = new double[OrbitPoolSize];
 
-            // 三行星:每颗一个头部 Ellipse + 一条拖尾 Polyline
-            // 行星有"立体感" — 头部用 RadialGradientBrush(中心白→边缘暗)模拟受光面
-            private const int PlanetCount = 3;
-            private readonly Ellipse[] _planetHeads = new Ellipse[PlanetCount];
-            private readonly Polyline[] _planetTrails = new Polyline[PlanetCount];
-            // 每颗行星的状态:alive / t / startR / endR / omega0 / phase0 / r0 / sizeBase
-            private readonly bool[] _planetAlive = new bool[PlanetCount];
-            private readonly double[] _planetT = new double[PlanetCount];
-            private readonly double[] _planetLife = new double[PlanetCount];
-            private readonly double[] _planetStartR = new double[PlanetCount];
-            private readonly double[] _planetEndR = new double[PlanetCount];
-            private readonly double[] _planetOmega0 = new double[PlanetCount];
-            private readonly double[] _planetPhase0 = new double[PlanetCount];
-            private readonly double[] _planetCurrentR = new double[PlanetCount];
-            private readonly double[] _planetSize = new double[PlanetCount];
-            // 行星拖尾位置(每颗 36 个点)
-            private readonly double[,] _planetTrailX = new double[PlanetCount, PlanetTrailLen];
-            private readonly double[,] _planetTrailY = new double[PlanetCount, PlanetTrailLen];
-            private readonly int[] _planetTrailHead = new int[PlanetCount];
-
-            // 喷发粒子池(只在吸/吐瞬间产生 — 模拟"被吸入消失的碎片"或"被吐出的星尘")
-            // 用于增强吸/吐的真实感(三行星主轨迹 + 一些碎片伴随)
+            // 喷发粒子池(吸/吐各 9 颗)
+            // 每颗:头部 Ellipse(亮点) + Polyline(弧线拖尾,12 节点)
+            // 拖尾用 LinearGradientBrush(头部浓、尾部淡)模拟被引力拉长的光带
             private readonly List<Ellipse> _burstPool = new();
             private readonly List<Polyline> _burstTrails = new();
             private readonly double[] _burstAge = new double[BurstPoolSize];
             private readonly double[] _burstLife = new double[BurstPoolSize];
-            private readonly double[] _burstSemiMajor = new double[BurstPoolSize];
-            private readonly double[] _burstEccentricity = new double[BurstPoolSize];
-            private readonly double[] _burstPhase0 = new double[BurstPoolSize];
-            private readonly double[] _burstOmega0 = new double[BurstPoolSize];
-            private readonly double[] _burstBaseR = new double[BurstPoolSize];
+            // 位置 (bx, by) — 每帧从 Update 写入
+            private readonly double[] _burstX = new double[BurstPoolSize];
+            private readonly double[] _burstY = new double[BurstPoolSize];
+            // 起始参数
+            private readonly double[] _burstStartR = new double[BurstPoolSize];
+            private readonly double[] _burstStartAngle = new double[BurstPoolSize];
             private readonly double[] _burstBaseSize = new double[BurstPoolSize];
-            private readonly double[] _burstTrailX = new double[BurstPoolSize * PlanetTrailLen];
-            private readonly double[] _burstTrailY = new double[BurstPoolSize * PlanetTrailLen];
+            // 吸入用:对数螺线 b
+            private readonly double[] _burstSpiralB = new double[BurstPoolSize];
+            // 吐出用:方向 + 切向/径向
+            private readonly double[] _burstDirX = new double[BurstPoolSize];
+            private readonly double[] _burstDirY = new double[BurstPoolSize];
+            private readonly double[] _burstSpeed = new double[BurstPoolSize];
+            private readonly double[] _burstTangentRatio = new double[BurstPoolSize];
+            // 拖尾位置环形缓冲
+            private readonly double[] _burstTrailX = new double[BurstPoolSize * BurstTrailLen];
+            private readonly double[] _burstTrailY = new double[BurstPoolSize * BurstTrailLen];
             private readonly int[] _burstTrailHead = new int[BurstPoolSize];
             private readonly bool[] _burstAlive = new bool[BurstPoolSize];
             private readonly bool[] _burstIsInward = new bool[BurstPoolSize];
@@ -551,7 +542,7 @@ namespace MemoryBlackHole.Views
 
             private void Build()
             {
-                // 1) 单层吸积盘(无旋转、慢呼吸,无模糊 — 纯渐变提供质感)
+                // 1) 单层吸积盘(无旋转、慢呼吸,无模糊)
                 _disk = new Ellipse
                 {
                     Width = DiskW, Height = DiskH,
@@ -564,7 +555,7 @@ namespace MemoryBlackHole.Views
                     Color.FromArgb(0, 0, 0, 0));
                 _canvas.Children.Add(_disk);
 
-                // 2) 中心光晕(暖色径向,无 BlurEffect — 渐变就是"软"光晕)
+                // 2) 中心光晕(暖色径向,无 BlurEffect)
                 _halo = new Ellipse
                 {
                     Width = HaloW, Height = HaloH,
@@ -577,8 +568,7 @@ namespace MemoryBlackHole.Views
                     Color.FromArgb(0, 0, 0, 0));
                 _canvas.Children.Add(_halo);
 
-                // 3) 事件视界 — 纯黑实心,无模糊,无渐变
-                // (问题 5:必须纯黑不透明,绝不能透出背景)
+                // 3) 事件视界 — 纯黑实心
                 _eventHorizon = new Ellipse
                 {
                     Width = EventW, Height = EventH,
@@ -587,14 +577,14 @@ namespace MemoryBlackHole.Views
                 };
                 _canvas.Children.Add(_eventHorizon);
 
-                // 4) 光子球 — 锐利细亮环(无 BlurEffect,描边清晰)
+                // 4) 光子球 — 锐利细亮环(描边粗细随 SizeScale 同步,保持锐利)
                 _photonRing = new Ellipse
                 {
                     Width = PhotonW, Height = PhotonH,
                     Stroke = Freeze(new SolidColorBrush(
                         _warm ? Color.FromArgb(220, 0xFF, 0xC8, 0x78)
                               : Color.FromArgb(220, 0xB0, 0xE0, 0xFF))),
-                    StrokeThickness = 2.0,
+                    StrokeThickness = 2.0 * SizeScale,   // 与 SizeScale 同步
                     IsHitTestVisible = false,
                     Opacity = 0.78,
                 };
@@ -607,104 +597,76 @@ namespace MemoryBlackHole.Views
                     Stroke = Freeze(new SolidColorBrush(
                         _warm ? Color.FromArgb(200, 0xFF, 0xD2, 0x80)
                               : Color.FromArgb(200, 0xC8, 0xE8, 0xFF))),
-                    StrokeThickness = 2.5,
+                    StrokeThickness = 2.5 * SizeScale,
                     IsHitTestVisible = false,
                     Opacity = 0,
                 };
                 _canvas.Children.Add(_shockwave);
 
-                // 6) 60 颗稳定吸积粒子 — 从最外圈出发,沿对数螺线向内,达视界后重生
-                // 全部无 BlurEffect(清晰亮点),用 Doppler 增亮
+                // 6) 100 颗稳定吸积粒子 — 从最外圈出发,沿对数螺线向内,达视界后重生
+                // 全部无 BlurEffect(清晰亮点),Doppler 增亮保留
+                // 关键:角速度按 r^(-2) 加速(比开普勒 r^(-1.5) 更猛,产生"最后瞬间被吸入"的加速度感)
                 var rng = new Random(_warm ? 17 : 113);
                 for (int i = 0; i < OrbitPoolSize; i++)
                 {
                     var dot = new Ellipse
                     {
                         IsHitTestVisible = false,
-                        // 不加 BlurEffect — 1.0x 下矢量边缘已清晰
                     };
                     _orbitPool.Add(dot);
                     _canvas.Children.Add(dot);
                     _orbitAngle[i]     = rng.NextDouble() * TwoPi;
-                    _orbitRadius[i]    = OrbitRInner + rng.NextDouble() * (OrbitROuter - OrbitRInner);
-                    _orbitSpeed[i]     = 0.18 + rng.NextDouble() * 0.55;     // 外圈慢
-                    _orbitSize[i]      = 1.6 + rng.NextDouble() * 3.0;
+                    // 出生:最外圈 ± 抖动
+                    _orbitRadius[i]    = OrbitROuter * (0.92 + rng.NextDouble() * 0.08);
+                    // 基础角速度:0.18~0.73(外圈慢)
+                    _orbitSpeed[i]     = 0.18 + rng.NextDouble() * 0.55;
+                    // 粒子大小
+                    _orbitSize[i]      = 1.6 + rng.NextDouble() * 2.6;
                     _orbitBaseAlpha[i] = 0.40 + rng.NextDouble() * 0.45;
+                    // 螺旋收缩率:每颗 6~14 px/s(随机),产生层次感
+                    _orbitShrink[i]    = 6.0 + rng.NextDouble() * 8.0;
                     // 离视界近的偏白热,远的偏冷
-                    double t = (_orbitRadius[i] - OrbitRInner) / (OrbitROuter - OrbitRInner);
-                    byte r = (byte)(255 * (1 - t * 0.55));
-                    byte g = (byte)(_warm ? (200 - t * 60) : (180 + t * 40));
-                    byte b = (byte)(_warm ? (90 + t * 60)  : (255 - t * 30));
+                    double t = 1.0 - (_orbitRadius[i] - OrbitRInner) / (OrbitROuter - OrbitRInner);
+                    byte r = (byte)(180 + 75 * t);
+                    byte g = (byte)(_warm ? (200 - t * 70) : (180 + t * 50));
+                    byte b = (byte)(_warm ? (90 + t * 70)  : (255 - t * 60));
                     var brush = Freeze(new SolidColorBrush(Color.FromArgb(230, r, g, b)));
                     dot.Fill = brush;
                     dot.Width = dot.Height = _orbitSize[i];
                 }
 
-                // 7) 三行星(预创建,初始不可见)
-                for (int p = 0; p < PlanetCount; p++)
-                {
-                    var head = new Ellipse
-                    {
-                        IsHitTestVisible = false,
-                        Opacity = 0,
-                    };
-                    // 行星立体感:径向渐变(中心白热 → 边缘暗),无 BlurEffect
-                    head.Fill = Freeze(new RadialGradientBrush
-                    {
-                        GradientStops = FreezeStops(new (Color, double)[]
-                        {
-                            (Color.FromArgb(255, 255, 250, 220), 0.0),
-                            (_warm ? Color.FromArgb(255, 0xFF, 0xB0, 0x50)
-                                  : Color.FromArgb(255, 0x9C, 0xD8, 0xFF), 0.55),
-                            (_warm ? Color.FromArgb(255, 0xC0, 0x40, 0x10)
-                                  : Color.FromArgb(255, 0x40, 0x80, 0xC0), 1.0),
-                        })
-                    });
-                    _planetHeads[p] = head;
-                    _canvas.Children.Add(head);
-
-                    var trail = new Polyline
-                    {
-                        IsHitTestVisible = false,
-                        Opacity = 0,
-                        StrokeThickness = 1.6,
-                        StrokeLineJoin = PenLineJoin.Round,
-                        StrokeStartLineCap = PenLineCap.Round,
-                        StrokeEndLineCap = PenLineCap.Round,
-                        Stroke = Freeze(new SolidColorBrush(
-                            _warm ? Color.FromArgb(180, 0xFF, 0xC0, 0x70)
-                                  : Color.FromArgb(180, 0xA0, 0xC8, 0xFF))),
-                    };
-                    // 拖尾自身不加 BlurEffect(清晰描边)— 1.0x 下保持锐利
-                    var pts = new PointCollection();
-                    for (int k = 0; k < PlanetTrailLen; k++) pts.Add(new Point(0, 0));
-                    trail.Points = pts;
-                    _planetTrails[p] = trail;
-                    _canvas.Children.Add(trail);
-                    _planetAlive[p] = false;
-                }
-
-                // 8) 喷发粒子池(吸/吐时伴生碎片,增强真实感)
+                // 7) 喷发粒子池(18 颗,每颗一个 Ellipse 头部 + 一条 Polyline 拖尾)
+                // 拖尾用 LinearGradientBrush(头部浓、尾部淡)模拟"被引力拉长的光带"
                 for (int i = 0; i < BurstPoolSize; i++)
                 {
                     var head = new Ellipse { IsHitTestVisible = false, Opacity = 0 };
-                    head.Fill = Freeze(new SolidColorBrush(
-                        _warm ? Color.FromRgb(0xFF, 0xD8, 0x88)
-                              : Color.FromRgb(0xCC, 0xEC, 0xFF)));
+                    head.Fill = Freeze(new RadialGradientBrush
+                    {
+                        // 头部立体感:中心白热 → 边缘暖色
+                        GradientStops = FreezeStops(new (Color, double)[]
+                        {
+                            (Color.FromArgb(255, 255, 250, 220), 0.0),
+                            (_warm ? Color.FromArgb(255, 0xFF, 0xC0, 0x70)
+                                  : Color.FromArgb(255, 0xA0, 0xD8, 0xFF), 0.6),
+                            (_warm ? Color.FromArgb(180, 0xFF, 0x80, 0x20)
+                                  : Color.FromArgb(180, 0x60, 0xB0, 0xFF), 1.0),
+                        })
+                    });
                     _burstPool.Add(head);
 
                     var trail = new Polyline
                     {
                         IsHitTestVisible = false,
                         Opacity = 0,
-                        StrokeThickness = 1.2,
+                        StrokeThickness = 1.8 * SizeScale,    // 描边随 SizeScale 同步
                         StrokeLineJoin = PenLineJoin.Round,
-                        Stroke = Freeze(new SolidColorBrush(
-                            _warm ? Color.FromArgb(200, 0xFF, 0xB0, 0x60)
-                                  : Color.FromArgb(200, 0x9C, 0xD8, 0xFF))),
+                        StrokeStartLineCap = PenLineCap.Round,
+                        StrokeEndLineCap = PenLineCap.Round,
+                        // 拖尾 gradient(头部浓、尾部淡) — 沿 polyline 长度方向
+                        Stroke = MakeTrailGradient(_warm),
                     };
                     var pts = new PointCollection();
-                    for (int k = 0; k < PlanetTrailLen; k++) pts.Add(new Point(0, 0));
+                    for (int k = 0; k < BurstTrailLen; k++) pts.Add(new Point(0, 0));
                     trail.Points = pts;
                     _burstTrails.Add(trail);
 
@@ -713,6 +675,25 @@ namespace MemoryBlackHole.Views
                     _burstAlive[i] = false;
                     _burstTrailHead[i] = 0;
                 }
+            }
+
+            /// <summary>
+            /// 拖尾专用渐变:沿 polyline 方向 alpha 0→220,头部浓、尾部淡。
+            /// </summary>
+            private static Brush MakeTrailGradient(bool warm)
+            {
+                var lg = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0, 0.5),
+                    EndPoint   = new Point(1, 0.5),
+                };
+                Color hot = warm ? Color.FromRgb(0xFF, 0xB0, 0x60)
+                                 : Color.FromRgb(0xA0, 0xC8, 0xFF);
+                lg.GradientStops.Add(new GradientStop(Color.FromArgb(0,   hot.R, hot.G, hot.B), 0.0));
+                lg.GradientStops.Add(new GradientStop(Color.FromArgb(80,  hot.R, hot.G, hot.B), 0.5));
+                lg.GradientStops.Add(new GradientStop(Color.FromArgb(220, hot.R, hot.G, hot.B), 1.0));
+                Freeze(lg);
+                return lg;
             }
 
             private static Brush MakeRadialGlow(Color inner, Color outer)
@@ -736,112 +717,89 @@ namespace MemoryBlackHole.Views
                 return f;
             }
 
-            public void PlayInward() => StartPlanetsAndBurst(inward: true);
-            public void PlayOutward() => StartPlanetsAndBurst(inward: false);
+            public void PlayInward() => StartBurst(inward: true);
+            public void PlayOutward() => StartBurst(inward: false);
 
             /// <summary>
-            /// 触发吸/吐动画:三行星(主轨迹)+ 15 颗碎片(伴生)。
+            /// 触发吸/吐特效(问题 3 重做):
             ///
-            /// 吸入(三行星,问题 6 思路):
-            ///   - 起点:最外圈 PlanetROuter, 终:视界外缘 PlanetRInner
-            ///   - 相位累加 6π(3 圈), 角速度按 r^(-1.5) 加速(引力感)
-            ///   - 半径 ease-in 向心收缩(越近越快)
-            ///   - 3 颗错开 120° 起始相位
-            ///   - t=0 不可见, t=0.1~0.2 渐入, t=0.95 后渐出(在视界边"消失")
+            /// 吸入(9 颗"光带",写实引力捕获感):
+            ///   - 起点:外圈 BurstROuter(9 颗均分角,带小扰动)
+            ///   - 路径:对数螺线 r = R₀ · exp(-b·t)  b=2.4~3.2, **前 60% 时间走完 30% 距离,后 40% 走 70%(ease-in 加速旋入)**
+            ///   - 角速度按 r^(-2) 加速(比开普勒 r^(-1.5) 更猛,产生"最后瞬间被切向卷入"的强烈引力感)
+            ///   - 头部 size 随 t 增大(临近视界时被拉长成弧线)
+            ///   - 头部 alpha 按多普勒蓝移:越靠中心越亮(0.6→1.0)
+            ///   - 0~0.10 渐入, 0.92~1.00 渐出(在视界边被吞没)
             ///
-            /// 吐出(三行星,反向):
-            ///   - 起点:视界外缘 PlanetRInner, 终:最外圈 PlanetROuter
-            ///   - 同样的 6π(3 圈),但半径 ease-out 向外扩张(初速慢,后段加速离场)
-            ///   - t=0.85~1.0 渐出(远离后自然消散)
+            /// 吐出(9 颗"光粒",反向 + 切向):
+            ///   - 起点:视界外缘 BurstRInner(9 颗均分角,带小扰动)
+            ///   - 切向为主(切向 / 径向 = 1.3 / 0.25),模仿吸积盘物质溢出而非极向喷流
+            ///   - ease-out cubic(前快后慢 — 初始柔和涌出,远端自然消散)
+            ///   - 0~0.12 渐入, 0.85~1.00 渐出
             /// </summary>
-            private void StartPlanetsAndBurst(bool inward)
+            private void StartBurst(bool inward)
             {
                 _pulse = 1.0;
                 _pulseDecay = 1.4;
                 _shockwaveAge = 0;
                 _shockwaveLife = 1.0;
 
-                // 三行星参数
-                for (int p = 0; p < PlanetCount; p++)
-                {
-                    _planetAlive[p] = true;
-                    _planetT[p] = 0;
-                    _planetLife[p] = 2.6;       // 2.6 秒走完 3 圈
-                    // 半径:吸 vs 吐
-                    if (inward)
-                    {
-                        _planetStartR[p] = PlanetROuter;
-                        _planetEndR[p]   = PlanetRInner;
-                    }
-                    else
-                    {
-                        _planetStartR[p] = PlanetRInner;
-                        _planetEndR[p]   = PlanetROuter;
-                    }
-                    // 起始相位错开 120°
-                    _planetPhase0[p] = (p * TwoPi / PlanetCount) + (_warm ? 0.0 : Math.PI);
-                    // 角速度按起始 r 反 1.5 次方 — 外圈慢、内圈快
-                    // 选 k 使 r=PlanetROuter=260 时 ω₀ ≈ 0.85 rad/s(约 7.4 秒一圈)
-                    // 整体走 3 圈 = 6π rad 用 2.6 秒 → 平均 ω ≈ 7.25 rad/s
-                    // 但因 r 在 t 中变化, 我们让 ω₀ = 7.25 rad/s 在外圈
-                    _planetOmega0[p] = 7.25;
-                    _planetCurrentR[p] = _planetStartR[p];
-                    // 行星大小:内圈稍大(近看更大,符合透视)
-                    _planetSize[p] = 6 + p * 1.0;  // 6/7/8 px
-                    // 拖尾清零
-                    for (int k = 0; k < PlanetTrailLen; k++)
-                    {
-                        _planetTrailX[p, k] = 0;
-                        _planetTrailY[p, k] = 0;
-                    }
-                    _planetTrailHead[p] = 0;
-                }
-
-                // 15 颗伴生碎片(增强真实感)
-                int burstTarget = 15;
+                const int target = 9;
                 int spawned = 0;
-                for (int i = 0; i < BurstPoolSize && spawned < burstTarget; i++)
+                for (int i = 0; i < BurstPoolSize && spawned < target; i++)
                 {
                     if (_burstAlive[i]) continue;
                     _burstAlive[i] = true;
                     _burstIsInward[i] = inward;
                     _burstAge[i] = 0;
-                    _burstLife[i] = 1.6 + (spawned * 0.06);
-                    _burstBaseSize[i] = 2.0 + (spawned % 3) * 0.8;
+                    _burstLife[i] = 1.6 + (spawned * 0.05);   // 1.6 ~ 2.0 秒
+                    _burstBaseSize[i] = 4.0 + (spawned % 3) * 1.5;   // 4/5.5/7 px
+                    // 起始位置:均分角 + 扰动
+                    double baseAngle = (spawned / (double)target) * TwoPi;
+                    double angleJitter = ((i % 3) - 1) * 0.08;
+                    double ang = baseAngle + angleJitter;
+
                     if (inward)
                     {
-                        // 碎片开普勒式椭圆轨道
-                        double a = PlanetROuter * (0.9 + (spawned % 4) * 0.08);
-                        double e = 0.30 + (spawned % 3) * 0.12;
-                        double k = 4.5 * Math.Pow(a, 1.5);
-                        double omega0 = k / Math.Pow(a, 1.5);
-                        _burstSemiMajor[i]    = a;
-                        _burstEccentricity[i] = e;
-                        _burstPhase0[i]       = (spawned / (double)burstTarget) * TwoPi + (i % 3) * 0.4;
-                        _burstOmega0[i]       = omega0;
-                        _burstBaseR[i]        = a * (1 + e);
+                        // 吸入:对数螺线 + 强加速
+                        _burstStartR[i]     = BurstROuter * (0.95 + (i % 4) * 0.02);
+                        _burstStartAngle[i] = ang;
+                        // b 越大越快旋入:2.4~3.2
+                        _burstSpiralB[i]    = 2.4 + (i % 4) * 0.2;
+                        _burstDirX[i] = 0; _burstDirY[i] = 0; _burstSpeed[i] = 0; _burstTangentRatio[i] = 0;
                     }
                     else
                     {
-                        // 吐出碎片:从视界切向抛出,ease-out 远离
-                        double a = (spawned / (double)burstTarget) * TwoPi;
-                        double tx = -Math.Sin(a);
-                        double ty =  Math.Cos(a) * 0.55;
-                        double speed = 280 + (spawned % 3) * 50;
-                        _burstSemiMajor[i]    = 0; _burstEccentricity[i] = 0;
-                        _burstPhase0[i]       = 0; _burstOmega0[i]       = 0;
-                        _burstBaseR[i]        = PlanetRInner;
-                        // 用 _burstPhase0[i] 当 vx,_burstOmega0[i] 当 vy 的复用空间
-                        // 实际上 vx/vy 临时存:用 _burstBaseSize[i] 不够 — 用 _burstSemiMajor/_burstEccentricity
-                        _burstSemiMajor[i]    = tx * speed;
-                        _burstEccentricity[i] = ty * speed;
+                        // 吐出:切向为主 + 径向少量
+                        // 切向单位向量(椭圆压扁 0.55)
+                        double tx = -Math.Sin(ang);
+                        double ty =  Math.Cos(ang) * 0.55;
+                        // 径向单位向量
+                        double rx =  Math.Cos(ang);
+                        double ry =  Math.Sin(ang) * 0.55;
+                        // 切向 1.3 + 径向 0.25
+                        double tangent = 1.3;
+                        double radial  = 0.25;
+                        double vx = tx * tangent + rx * radial;
+                        double vy = ty * tangent + ry * radial;
+                        // 速度:380 ~ 540 px/s
+                        double speed = 380 + (spawned % 4) * 50;
+                        _burstStartR[i]       = BurstRInner;
+                        _burstStartAngle[i]   = ang;
+                        _burstDirX[i]         = vx;
+                        _burstDirY[i]         = vy;
+                        _burstSpeed[i]        = speed;
+                        _burstTangentRatio[i] = tangent;
+                        _burstSpiralB[i]      = 0;
                     }
+
+                    // 头部 / 拖尾
                     var head = _burstPool[i];
                     head.Width = head.Height = _burstBaseSize[i];
                     head.Opacity = 0;
                     var trail = _burstTrails[i];
                     var pts = trail.Points;
-                    for (int k = 0; k < PlanetTrailLen; k++) pts[k] = new Point(0, 0);
+                    for (int k = 0; k < BurstTrailLen; k++) pts[k] = new Point(0, 0);
                     trail.Opacity = 0;
                     _burstTrailHead[i] = 0;
                     spawned++;
@@ -864,16 +822,16 @@ namespace MemoryBlackHole.Views
                 LayoutCentered(_disk, cx, cy, breath * (1.0 + _pulse * 0.10));
                 _disk.Opacity = diskOpacity;
 
-                // 2) 中心光晕(暖/冷渐变,无模糊)
+                // 2) 中心光晕
                 LayoutCentered(_halo, cx, cy, 1.0 + _pulse * 0.10);
                 _halo.Opacity = coreGlowOpacity;
 
-                // 3) 事件视界 + 光子球(吸/吐时抬升)
+                // 3) 事件视界 + 光子球
                 double scale = 1.0 + _pulse * 0.08;
                 LayoutCentered(_photonRing,   cx, cy, scale);
                 LayoutCentered(_eventHorizon, cx, cy, scale);
                 _photonRing.Opacity   = Math.Min(1.0, photonRingOpacity);
-                _eventHorizon.Opacity = 1.0;     // 永远不透明,纯黑
+                _eventHorizon.Opacity = 1.0;
 
                 // 4) 中心涟漪
                 if (_shockwaveAge < _shockwaveLife)
@@ -889,24 +847,23 @@ namespace MemoryBlackHole.Views
                     _shockwave.Opacity = 0;
                 }
 
-                // 5) 60 颗稳定吸积粒子 — 从最外圈出发,向内螺旋,达视界后重生
-                // (问题 4 整改:禁止向外漂、禁止穿过视界、禁止匀速转圈)
-                // 用"半径随时间线性收缩 + 角速度按 r^(-1.5) 开普勒式"
+                // 5) 100 颗稳定吸积粒子 — 对数螺线向心 + r^(-2) 角速度加速
+                // 关键:外圈慢,越靠近视界越快,最后瞬间被切向卷入
                 for (int i = 0; i < OrbitPoolSize; i++)
                 {
-                    // 角速度:外圈慢,内圈快
-                    double omega = _orbitSpeed[i] * Math.Pow(OrbitROuter / _orbitRadius[i], 1.5);
+                    // 角速度按 r^(-2) 加速(比开普勒 r^(-1.5) 更猛)
+                    double omega = _orbitSpeed[i] * Math.Pow(OrbitROuter / _orbitRadius[i], 2.0);
                     _orbitAngle[i] += omega * delta;
-                    // 半径持续向内收缩(被引力吸入,不复反弹)
-                    _orbitRadius[i] -= delta * (5 + (i % 4) * 1.5);
-                    // 到达视界外缘 → 立即从最外圈重生(永远不穿越)
+                    // 半径每颗按 _orbitShrink[i] 持续线性收缩
+                    _orbitRadius[i] -= _orbitShrink[i] * delta;
+                    // 到达视界外缘 → 立即从外圈重生(永远不穿越)
                     if (_orbitRadius[i] <= OrbitRInner)
                     {
-                        _orbitRadius[i] = OrbitROuter - 4 + (i % 6) * 1.0;
-                        _orbitAngle[i]  += (i % 5) * 0.15;  // 重生时相位稍偏移,避免同位
+                        _orbitRadius[i] = OrbitROuter * (0.92 + (i % 6) * 0.015);
+                        _orbitAngle[i]  += (i % 5) * 0.15;
                     }
                     double r = _orbitRadius[i];
-                    // 椭圆压扁 0.52 模拟盘面倾角
+                    // 椭圆压扁 0.52 模拟盘面
                     double x = Math.Cos(_orbitAngle[i]) * r;
                     double y = Math.Sin(_orbitAngle[i]) * r * 0.52;
                     // Doppler 增亮:右半侧(向观察者来)更亮
@@ -918,73 +875,7 @@ namespace MemoryBlackHole.Views
                     Canvas.SetTop(dot,  cy + y - dot.Height / 2);
                 }
 
-                // 6) 三行星(吸/吐主轨迹)
-                for (int p = 0; p < PlanetCount; p++)
-                {
-                    if (!_planetAlive[p]) continue;
-                    _planetT[p] += delta;
-                    double t = _planetT[p] / _planetLife[p];
-                    if (t >= 1.0)
-                    {
-                        _planetAlive[p] = false;
-                        _planetHeads[p].Opacity = 0;
-                        _planetTrails[p].Opacity = 0;
-                        continue;
-                    }
-                    // 半径:吸 = start→end ease-in(t²);吐 = start→end ease-out(1-(1-t)²)
-                    double r;
-                    if (_planetEndR[p] < _planetStartR[p])
-                    {
-                        // 吸入:ease-in(向心加速)
-                        double e = t * t;
-                        r = _planetStartR[p] + (_planetEndR[p] - _planetStartR[p]) * e;
-                    }
-                    else
-                    {
-                        // 吐出:ease-out(初速慢,后段加速离场)
-                        double e = 1.0 - (1.0 - t) * (1.0 - t);
-                        r = _planetStartR[p] + (_planetEndR[p] - _planetStartR[p]) * e;
-                    }
-                    _planetCurrentR[p] = r;
-                    // 角速度按 r^(-1.5) 加速(引力感)
-                    double omega = _planetOmega0[p] * Math.Pow(_planetStartR[p] / Math.Max(r, 30), 1.5);
-                    _planetPhase0[p] += omega * delta;
-                    double a = _planetPhase0[p];
-                    // 椭圆压扁 0.52 模拟盘面
-                    double bx = Math.Cos(a) * r;
-                    double by = Math.Sin(a) * r * 0.52;
-
-                    // 头部透明度:0~0.1 渐入, 0.90~1.0 渐出
-                    double headOpacity;
-                    if (t < 0.10) headOpacity = t / 0.10;
-                    else if (t < 0.90) headOpacity = 1.0;
-                    else headOpacity = Math.Max(0, 1.0 - (t - 0.90) / 0.10);
-
-                    // 头部大小:近看稍大(随 r 减小线性增大)
-                    double sizeMul = 1.0 + (PlanetROuter - r) / PlanetROuter * 0.6;
-                    _planetHeads[p].Width = _planetHeads[p].Height = _planetSize[p] * sizeMul;
-
-                    // 拖尾环形缓冲
-                    int head = _planetTrailHead[p];
-                    _planetTrailX[p, head] = bx;
-                    _planetTrailY[p, head] = by;
-                    _planetTrailHead[p] = (head + 1) % PlanetTrailLen;
-                    // 写入 Polyline
-                    var pts = _planetTrails[p].Points;
-                    for (int k = 0; k < PlanetTrailLen; k++)
-                    {
-                        int srcIdx = (head + 1 + k) % PlanetTrailLen;
-                        pts[k] = new Point(
-                            cx + _planetTrailX[p, srcIdx],
-                            cy + _planetTrailY[p, srcIdx]);
-                    }
-                    _planetTrails[p].Opacity = headOpacity * 0.85;
-                    Canvas.SetLeft(_planetHeads[p], cx + bx - _planetHeads[p].Width / 2);
-                    Canvas.SetTop(_planetHeads[p],  cy + by - _planetHeads[p].Height / 2);
-                    _planetHeads[p].Opacity = headOpacity;
-                }
-
-                // 7) 15 颗伴生碎片(吸:开普勒轨道 / 吐:切向 ease-out)
+                // 6) 9 颗喷发光带/光粒(吸/吐 — 自由发挥,见 StartBurst 注释)
                 for (int i = 0; i < BurstPoolSize; i++)
                 {
                     if (!_burstAlive[i]) continue;
@@ -997,43 +888,83 @@ namespace MemoryBlackHole.Views
                         _burstTrails[i].Opacity = 0;
                         continue;
                     }
+
                     double bx, by;
                     if (_burstIsInward[i])
                     {
-                        double a0 = _burstSemiMajor[i];
-                        double at = a0 * (1.0 - t * t * 0.98);
-                        if (at < 8) at = 8;
-                        double e = _burstEccentricity[i];
-                        _burstPhase0[i] += _burstOmega0[i] * Math.Pow(a0 / at, 1.5) * delta;
-                        double theta = _burstPhase0[i];
-                        double r = at * (1.0 - e * e) / (1.0 + e * Math.Cos(theta));
-                        bx = Math.Cos(theta) * r;
-                        by = Math.Sin(theta) * r * 0.55;
+                        // 吸入:对数螺线 + r^(-2) 角速度加速(强引力感)
+                        // 半径:r = R₀ · exp(-b·t)
+                        double r = _burstStartR[i] * Math.Exp(-_burstSpiralB[i] * t);
+                        if (r < 4) r = 4;
+                        // 角速度:基线 + r^(-2) 加速(已收缩的圆周转得更快)
+                        double omegaAccel = Math.Pow(_burstStartR[i] / r, 2.0);
+                        // 当前累积相位:在 Update 中累加(原 StartBurst 中已给 _burstStartAngle)
+                        // 这里用本地 phase 变量更清晰,但代码已用 _burstX/Y 存位置,直接用数组
+                        // 简化:角速度积分 = _burstStartAngle + ∫ω dt
+                        // 用闭式:角速度按 r^(-2), r 指数衰减, ∫ω dt 的解析式比较复杂
+                        // 改用数值:每帧累加 omega = baseOmega * (R0/r)^2
+                        // 但需要状态变量存 phase — 借用 _burstX[?] 不合适,直接定义 phase 累加
+                        // 实际方案:用 _burstStartAngle 作为初始 phase, 每帧 phase += omega * delta
+                        // 但 _burstStartAngle 是 const-ish(只在 StartBurst 设一次),
+                        // 改成 _burstAge 同时累加 phase 字段会破坏现有数组;
+                        // 替代:用 _burstDirX 存 phase 累加值
+                        // 已经在 StartBurst 中设 _burstDirX=0,这里累加
+                        double baseOmega = 4.5;    // 基础角速度(rad/s),R0 处
+                        _burstDirX[i] += baseOmega * omegaAccel * delta;
+                        double phase = _burstStartAngle[i] + _burstDirX[i];
+                        bx = Math.Cos(phase) * r;
+                        by = Math.Sin(phase) * r * 0.55;
                     }
                     else
                     {
-                        // 吐出碎片:用 vx=SemiMajor, vy=Eccentricity
+                        // 吐出:切向初速度 + ease-out cubic 减速
+                        // 距离 = speed * ease * life * 0.55
                         double ease = 1.0 - Math.Pow(1.0 - t, 3.0);
-                        double travel = ease * _burstLife[i] * 0.55;
-                        bx = _burstSemiMajor[i] * travel;
-                        by = _burstEccentricity[i] * travel;
+                        double travel = _burstSpeed[i] * ease * _burstLife[i] * 0.55;
+                        bx = _burstDirX[i] * travel;
+                        by = _burstDirY[i] * travel;
                     }
-                    // 头/尾
-                    double headOpacity = t < 0.20 ? (t / 0.20) : Math.Max(0, 1.0 - (t - 0.20) / 0.80);
-                    // 环形拖尾
+                    _burstX[i] = bx;
+                    _burstY[i] = by;
+
+                    // 头部透明度
+                    double headOpacity;
+                    if (_burstIsInward[i])
+                    {
+                        // 吸入:0~0.10 渐入, 0.92~1.00 渐出
+                        // 越靠近中心越亮(多普勒蓝移):0.6→1.0
+                        if (t < 0.10) headOpacity = t / 0.10;
+                        else if (t < 0.92) headOpacity = 1.0;
+                        else headOpacity = Math.Max(0, 1.0 - (t - 0.92) / 0.08);
+                        headOpacity = Math.Min(1.0, headOpacity * (0.6 + 0.4 * t));
+                        // 头部放大:临近视界时被拉长
+                        double s = _burstBaseSize[i] * (1.0 + t * 1.4);
+                        _burstPool[i].Width = _burstPool[i].Height = s;
+                    }
+                    else
+                    {
+                        // 吐出:0~0.12 渐入(中心亮闪), 0.85~1.00 渐出
+                        if (t < 0.12) headOpacity = t / 0.12;
+                        else if (t < 0.85) headOpacity = 1.0;
+                        else headOpacity = Math.Max(0, 1.0 - (t - 0.85) / 0.15);
+                    }
+
+                    // 拖尾环形缓冲
                     int head = _burstTrailHead[i];
-                    int baseIdx = i * PlanetTrailLen;
+                    int baseIdx = i * BurstTrailLen;
                     _burstTrailX[baseIdx + head] = bx;
                     _burstTrailY[baseIdx + head] = by;
-                    _burstTrailHead[i] = (head + 1) % PlanetTrailLen;
+                    _burstTrailHead[i] = (head + 1) % BurstTrailLen;
+                    // Polyline 写入(从最旧到最新)
                     var pts = _burstTrails[i].Points;
-                    for (int k = 0; k < PlanetTrailLen; k++)
+                    for (int k = 0; k < BurstTrailLen; k++)
                     {
-                        int srcIdx = (head + 1 + k) % PlanetTrailLen;
-                        pts[k] = new Point(cx + _burstTrailX[baseIdx + srcIdx],
-                                          cy + _burstTrailY[baseIdx + srcIdx]);
+                        int srcIdx = (head + 1 + k) % BurstTrailLen;
+                        pts[k] = new Point(
+                            cx + _burstTrailX[baseIdx + srcIdx],
+                            cy + _burstTrailY[baseIdx + srcIdx]);
                     }
-                    _burstTrails[i].Opacity = headOpacity * 0.70;
+                    _burstTrails[i].Opacity = headOpacity * 0.85;
                     Canvas.SetLeft(_burstPool[i], cx + bx - _burstPool[i].Width / 2);
                     Canvas.SetTop(_burstPool[i],  cy + by - _burstPool[i].Height / 2);
                     _burstPool[i].Opacity = headOpacity;
@@ -1048,6 +979,7 @@ namespace MemoryBlackHole.Views
                 Canvas.SetTop(el,  cy - h / 2);
             }
         }
+
 
 
 
