@@ -39,6 +39,8 @@ async Task RunAsync()
     var extractedSmall = Path.Combine(root, "small-extracted.bin");
     service.ExtractBlobToFile(small.Id, extractedSmall);
     Assert(Hash(smallSource) == Hash(extractedSmall), "Extracted BLOB bytes differ from the original small file.");
+    var results = service.Search("small.bin");
+    Assert(results.Count == 1 && results[0].FileData is null, "Search results must not materialize FileData into memory.");
 
     var large = NewFileItem("large.bin", 2048);
     service.AddFile(large, largeSource);

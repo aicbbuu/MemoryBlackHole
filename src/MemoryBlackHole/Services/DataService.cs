@@ -13,7 +13,7 @@ namespace MemoryBlackHole.Services
     /// <summary>
     /// 本地存储服务：SQLite 存元数据 + FTS5 全文索引。
     /// 数据全部落在 EXE 同目录 .memoryblackhole/ 下，纯本地、无云端。
-    /// v2.0.1: 文件数据全部存入 SQLite BLOB；中文搜索 LIKE；回收站+导出导入。
+    /// 文件≤1GiB 时流式存入 SQLite BLOB，超过时保存本地副本路径；中文搜索 LIKE；回收站+导出导入。
     /// </summary>
     public class DataService
     {
@@ -341,8 +341,8 @@ namespace MemoryBlackHole.Services
                     Title = rd.IsDBNull(rd.GetOrdinal("Title")) ? null : rd.GetString(rd.GetOrdinal("Title")),
                     Content = rd.IsDBNull(rd.GetOrdinal("Content")) ? null : rd.GetString(rd.GetOrdinal("Content")),
                     FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
-                    FileData = rd.IsDBNull(rd.GetOrdinal("FileData")) ? null :
-                        rd.GetInt64(rd.GetOrdinal("FileSizeBytes")) <= 50L * 1024 * 1024 ? rd.GetFieldValue<byte[]>(rd.GetOrdinal("FileData")) : null,
+                    // 搜索列表只加载元数据；文件 BLOB 在预览时按流提取，避免多条结果耗尽内存。
+                    FileData = null,
                     OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
                     FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
                     Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),
