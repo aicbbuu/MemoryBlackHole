@@ -175,43 +175,98 @@ namespace MemoryBlackHole.Services
         }
 
         /// <summary>
-        /// 新增一条文件类记忆（非文本/链接）。
-        /// 文件复制到 .memoryblackhole/files/ 目录，数据库只存文件路径（避免 OOM）。
+        /// 新增一条文件类记忆。≤1GiB 的文件通过 SqliteBlob 流式写入 SQLite；
+        /// 超过 1GiB 时才复制到 .memoryblackhole/files/，数据库保存该副本路径。
         /// </summary>
         public void AddFile(MemoryItem item, string sourcePath)
         {
             var fileInfo = new FileInfo(sourcePath);
             item.FileSizeBytes = fileInfo.Length;
 
-            // 复制到外部目录
-            var ext = Path.GetExtension(sourcePath);
-            var fileName = $"{Guid.NewGuid():N}{ext}";
-            var destPath = Path.Combine(_fileStoreDir, fileName);
-            File.Copy(sourcePath, destPath, overwrite: false);
+            if (fileInfo.Length <= _largeFileThreshold)
+            {
+                AddBlobFile(item, sourcePath);
+                return;
+            }
 
-            item.FilePath = destPath;
-            item.FileData = null;
+            AddExternalFile(item, sourcePath);
+        }
 
+        private void AddBlobFile(MemoryItem item, string sourcePath)
+        {
             using var conn = new SqliteConnection(_connectionString);
             conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"
-                INSERT INTO Items(Type, Title, Content, FilePath, FileData,
-                                  OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                VALUES ($type, $title, $content, $file, NULL,
-                        $ofn, $fsize, $note, $tags, $created, $fav);
-                SELECT last_insert_rowid();";
+            using var transaction = conn.BeginTransaction();
+            try
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = transaction;
+                cmd.CommandText = @"
+                    INSERT INTO Items(Type, Title, Content, FilePath, FileData,
+                                      OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
+                    VALUES ($type, $title, $content, NULL, zeroblob($blobSize),
+                            $ofn, $fsize, $note, $tags, $created, $fav);
+                    SELECT last_insert_rowid();";
+                AddItemParameters(cmd, item);
+                cmd.Parameters.AddWithValue("$blobSize", item.FileSizeBytes);
+                item.Id = (long)cmd.ExecuteScalar()!;
+
+                // Microsoft.Data.Sqlite 官方支持的增量 BLOB API：只保留 CopyTo 的缓冲区于内存。
+                using var input = File.OpenRead(sourcePath);
+                using var output = new SqliteBlob(conn, "Items", "FileData", item.Id, readOnly: false);
+                input.CopyTo(output, 1024 * 1024); // 1MiB buffer
+                transaction.Commit();
+                item.FilePath = null;
+                item.FileData = null;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
+        private void AddExternalFile(MemoryItem item, string sourcePath)
+        {
+            var extension = Path.GetExtension(sourcePath);
+            var destination = Path.Combine(_fileStoreDir, $"{Guid.NewGuid():N}{extension}");
+            File.Copy(sourcePath, destination, overwrite: false);
+
+            try
+            {
+                using var conn = new SqliteConnection(_connectionString);
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"
+                    INSERT INTO Items(Type, Title, Content, FilePath, FileData,
+                                      OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
+                    VALUES ($type, $title, $content, $file, NULL,
+                            $ofn, $fsize, $note, $tags, $created, $fav);
+                    SELECT last_insert_rowid();";
+                AddItemParameters(cmd, item);
+                cmd.Parameters.AddWithValue("$file", destination);
+                item.Id = (long)cmd.ExecuteScalar()!;
+                item.FilePath = destination;
+                item.FileData = null;
+            }
+            catch
+            {
+                try { File.Delete(destination); } catch { }
+                throw;
+            }
+        }
+
+        private static void AddItemParameters(SqliteCommand cmd, MemoryItem item)
+        {
             cmd.Parameters.AddWithValue("$type", item.Type);
             cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$file", destPath);
             cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
             cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$tags", (object?)item.Tags ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$created", item.CreatedAt.ToString("o"));
             cmd.Parameters.AddWithValue("$fav", item.IsFavorite ? 1 : 0);
-            item.Id = (long)cmd.ExecuteScalar()!;
         }
 
         /// <summary>按关键词全文搜索。中文/CJK 用 LIKE 模糊匹配（字节级 100% 可靠）；
