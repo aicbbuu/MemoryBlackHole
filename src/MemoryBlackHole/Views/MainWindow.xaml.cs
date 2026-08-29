@@ -461,8 +461,8 @@ namespace MemoryBlackHole.Views
             private Ellipse _photonRing = null!;
             private Ellipse _eventHorizon = null!;
             private Ellipse _coreGlow = null!;
-            private Path _jetTop = null!;
-            private Path _jetBottom = null!;
+            private System.Windows.Shapes.Path _jetTop = null!;
+            private System.Windows.Shapes.Path _jetBottom = null!;
 
             private readonly List<Ellipse> _orbitPool = new();
             private readonly double[] _orbitAngle = new double[OrbitPoolSize];
@@ -609,10 +609,10 @@ namespace MemoryBlackHole.Views
                 _ringSpeeds.Add(speed);
             }
 
-            private static Path MakeJetPath(double halfWidth, double tipY, bool warm)
+            private static System.Windows.Shapes.Path MakeJetPath(double halfWidth, double tipY, bool warm)
             {
                 double h = Math.Abs(tipY) * 2;
-                var pg = new Path
+                var pg = new System.Windows.Shapes.Path
                 {
                     Width = halfWidth * 2,
                     Height = h,
