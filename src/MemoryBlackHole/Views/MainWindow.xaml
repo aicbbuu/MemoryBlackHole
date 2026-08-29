@@ -292,7 +292,7 @@
                     </Border>
                     <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
                                Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
-                    <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer x:Name="ResultsScrollViewer" MaxHeight="360" VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
                                       Visibility="Collapsed" MouseDoubleClick="ResultsList_MouseDoubleClick"/>
                     </ScrollViewer>

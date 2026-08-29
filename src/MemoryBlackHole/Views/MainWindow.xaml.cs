@@ -49,6 +49,14 @@ namespace MemoryBlackHole.Views
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
                 RefreshSearchResults();
                 CompositionTarget.Rendering += OnRendering;
+
+                // 反转探索页面滚动方向（匹配 Windows 标准行为）
+                ResultsScrollViewer.PreviewMouseWheel += (s, e) =>
+                {
+                    ResultsScrollViewer.ScrollToVerticalOffset(
+                        ResultsScrollViewer.VerticalOffset - e.Delta);
+                    e.Handled = true;
+                };
             };
             Closed += (_, _) =>
             {
