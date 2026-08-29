@@ -454,6 +454,9 @@ namespace MemoryBlackHole.Views
             // 辉光用 RadialGradientBrush 即可,主体轮廓保持矢量锐利。
             private const double SizeScale = 1.25;
 
+            // 2π 常量(整段重写时误删,618/758 行引用 — 补回)
+            private const double TwoPi = Math.PI * 2.0;
+
             // 事件视界(纯黑实心,无 BlurEffect / 无渐变)
             private const double EventW    = 180 * SizeScale;
             private const double EventH    = 180 * SizeScale;
