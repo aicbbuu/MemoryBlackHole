@@ -112,8 +112,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = $env:GITHUB_REF_NAME
+          $ver = $tag -replace '^v',''
+          Copy-Item artifacts/publish/win-x64/MemoryBlackHole.exe "artifacts/publish/win-x64/MemoryBlackHole-$ver-win-x64.exe"
+          $existing = gh release view $tag 2>$null
+          if ($existing) { gh release delete $tag -y }
           gh release create $tag `
-            artifacts/publish/win-x64/MemoryBlackHole.exe `
+            "artifacts/publish/win-x64/MemoryBlackHole-$ver-win-x64.exe" `
             artifacts/installer/MemoryBlackHole-Setup-*-win-x64.exe `
             --title $tag `
             --generate-notes
