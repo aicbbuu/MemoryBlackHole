@@ -332,7 +332,7 @@ namespace MemoryBlackHole.Services
             cmd.ExecuteNonQuery();
         }
 
-        private void SaveSetting(string key, string value)        private void SaveSetting(string key, string value)
+        private void SaveSetting(string key, string value)
         {
             using var conn = new SqliteConnection(_connectionString);
             conn.Open();
