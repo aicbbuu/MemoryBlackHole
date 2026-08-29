@@ -453,16 +453,39 @@ namespace MemoryBlackHole.Views
             private const int BurstPoolSize = 24;
             private const double TwoPi = Math.PI * 2.0;
 
+            // 整体尺寸缩放系数(v3.0.1):所有视觉元素长宽/半径都按此基准。
+            // 修改这一个常量即可统一调整黑洞大小。
+            private const double SizeScale = 1.5;
+
+            // 吸积盘统一使用 SizeScale 后的基准尺寸
+            private const double CoreGlowW  = 480 * SizeScale;   // 中心辉光
+            private const double CoreGlowH  = 360 * SizeScale;
+            private const double EventW     = 200 * SizeScale;   // 事件视界
+            private const double EventH     = 190 * SizeScale;
+            private const double PhotonW    = 244 * SizeScale;   // 光子球
+            private const double PhotonH    = 232 * SizeScale;
+            private const double DiskHaloW  = 720 * SizeScale;   // 替代 4 环的单层柔光环
+            private const double DiskHaloH  = 460 * SizeScale;
+            private const double JetHalfW    = 40  * SizeScale;   // 双极喷流
+            private const double JetLength   = 220 * SizeScale;
+
+            // 粒子轨道半径基准(放大 1.5x)
+            private const double OrbitRInner = 95  * SizeScale;
+            private const double OrbitROuter = 330 * SizeScale;
+            private const double OrbitResetR = 138;              // < 此值重置回外圈
+            private const double SpawnRBase  = 470 * SizeScale;  // 喷发起始半径
+
+            // 拖尾节点数
+            private const int TrailLen = 8;
+
             private readonly Canvas _canvas;
             private readonly bool _warm;
-            private readonly List<Ellipse> _rings = new();
-            private readonly List<RotateTransform> _ringRotations = new();
-            private readonly List<double> _ringSpeeds = new();
+            private System.Windows.Shapes.Path _jetTop = null!;
+            private System.Windows.Shapes.Path _jetBottom = null!;
+            private Ellipse _diskHalo = null!;   // 替代 4 环的单层柔和吸积盘
             private Ellipse _photonRing = null!;
             private Ellipse _eventHorizon = null!;
             private Ellipse _coreGlow = null!;
-            private System.Windows.Shapes.Path _jetTop = null!;
-            private System.Windows.Shapes.Path _jetBottom = null!;
 
             private readonly List<Ellipse> _orbitPool = new();
             private readonly double[] _orbitAngle = new double[OrbitPoolSize];
@@ -471,14 +494,20 @@ namespace MemoryBlackHole.Views
             private readonly double[] _orbitSize = new double[OrbitPoolSize];
             private readonly double[] _orbitBaseAlpha = new double[OrbitPoolSize];
 
+            // 喷发粒子:每颗一个 Ellipse(头部亮点) + 一条 Polyline(拖尾)
             private readonly List<Ellipse> _burstPool = new();
+            private readonly List<Polyline> _burstTrails = new();
             private readonly double[] _burstAge = new double[BurstPoolSize];
             private readonly double[] _burstLife = new double[BurstPoolSize];
             private readonly double[] _burstVX = new double[BurstPoolSize];
             private readonly double[] _burstVY = new double[BurstPoolSize];
-            private readonly double[] _burstStartX = new double[BurstPoolSize];
-            private readonly double[] _burstStartY = new double[BurstPoolSize];
+            private readonly double[] _burstBaseR = new double[BurstPoolSize];  // 螺旋起始半径
+            private readonly double[] _burstBaseA = new double[BurstPoolSize];  // 螺旋起始角
             private readonly double[] _burstBaseSize = new double[BurstPoolSize];
+            private readonly double[] _burstSpiralB = new double[BurstPoolSize];// 对数螺线 b
+            private readonly double[] _burstTrailX = new double[BurstPoolSize * TrailLen];
+            private readonly double[] _burstTrailY = new double[BurstPoolSize * TrailLen];
+            private readonly int[] _burstTrailHead = new int[BurstPoolSize];    // 环形头指针
             private readonly bool[] _burstAlive = new bool[BurstPoolSize];
 
             private double _time;
@@ -492,10 +521,25 @@ namespace MemoryBlackHole.Views
 
             private void Build()
             {
-                // 1) 中心辉光(大软光晕,内核外侧)
+                // 1) 单层柔和吸积盘(替代原 4 环):大椭圆,统一暖/冷单色调,无旋转,慢呼吸
+                _diskHalo = new Ellipse
+                {
+                    Width = DiskHaloW,
+                    Height = DiskHaloH,
+                    IsHitTestVisible = false,
+                    Opacity = 0.32,
+                };
+                _diskHalo.Fill = MakeRadialGlow(_warm
+                    ? Color.FromArgb(170, 0xFF, 0xA1, 0x4A)
+                    : Color.FromArgb(160, 0x8E, 0xC8, 0xFF),
+                    Color.FromArgb(0, 0, 0, 0));
+                _diskHalo.Effect = new BlurEffect { Radius = 32, KernelType = KernelType.Gaussian };
+                _canvas.Children.Add(_diskHalo);
+
+                // 2) 中心辉光
                 _coreGlow = new Ellipse
                 {
-                    Width = 480, Height = 360,
+                    Width = CoreGlowW, Height = CoreGlowH,
                     IsHitTestVisible = false,
                     Opacity = 0.55,
                 };
@@ -503,11 +547,14 @@ namespace MemoryBlackHole.Views
                     ? Color.FromArgb(220, 0xFF, 0x86, 0x2E)
                     : Color.FromArgb(210, 0x6B, 0xC8, 0xFF),
                     Color.FromArgb(0, 0, 0, 0));
-                _coreGlow.Effect = new BlurEffect { Radius = 38, KernelType = KernelType.Gaussian };
+                _coreGlow.Effect = new BlurEffect { Radius = 48, KernelType = KernelType.Gaussian };
                 _canvas.Children.Add(_coreGlow);
 
-                // 2) 事件视界(中心深黑球,边缘透出 Doppler 增亮)
-                _eventHorizon = new Ellipse { Width = 200, Height = 190, IsHitTestVisible = false };
+                // 3) 事件视界
+                _eventHorizon = new Ellipse
+                {
+                    Width = EventW, Height = EventH, IsHitTestVisible = false,
+                };
                 _eventHorizon.Fill = Freeze(new RadialGradientBrush
                 {
                     GradientStops = FreezeStops(new (Color, double)[]
@@ -521,49 +568,43 @@ namespace MemoryBlackHole.Views
                 });
                 _canvas.Children.Add(_eventHorizon);
 
-                // 3) 光子球(最内圈细亮环,模拟弯曲光强反射)
+                // 4) 光子球
                 _photonRing = new Ellipse
                 {
-                    Width = 244, Height = 232,
+                    Width = PhotonW, Height = PhotonH,
                     Stroke = Freeze(new SolidColorBrush(
                         _warm ? Color.FromArgb(210, 0xFF, 0xC2, 0x70)
                               : Color.FromArgb(210, 0xB8, 0xE8, 0xFF))),
-                    StrokeThickness = 1.6,
+                    StrokeThickness = 2.0,
                     IsHitTestVisible = false,
-                    Opacity = 0.75,
+                    Opacity = 0.78,
                 };
                 _canvas.Children.Add(_photonRing);
 
-                // 4) 4 层吸积盘(独立旋转,椭圆压扁模拟相对论倾角)
-                AddDiskRing(680, 168,   6, _warm ? "#FFD18A" : "#D8E7FF",  0.10, 6);
-                AddDiskRing(560, 124,  12, _warm ? "#FF8A3D" : "#A8C7FF", -0.22, 7);
-                AddDiskRing(440,  86, -18, _warm ? "#FFB52E" : "#E7F0FF",  0.36, 5);
-                AddDiskRing(330,  58,  24, _warm ? "#FFF4D0" : "#B9D7FF", -0.55, 3);
-
-                // 5) 双极喷流(常驻但低不透明度,吸/吐时抬升)
-                _jetTop = MakeJetPath(40, -200, _warm);
-                _jetBottom = MakeJetPath(40, 200, _warm);
+                // 5) 双极喷流(放大 1.5x)
+                _jetTop = MakeJetPath(JetHalfW, -JetLength, _warm);
+                _jetBottom = MakeJetPath(JetHalfW,  JetLength, _warm);
                 _canvas.Children.Add(_jetBottom);
                 _canvas.Children.Add(_jetTop);
 
-                // 6) 稳定吸积粒子池(全部预创建,运行期零分配)
+                // 6) 稳定吸积粒子池(60 颗,1.5x 半径)
                 var rng = new Random(_warm ? 17 : 113);
                 for (int i = 0; i < OrbitPoolSize; i++)
                 {
                     var dot = new Ellipse
                     {
                         IsHitTestVisible = false,
-                        Effect = new BlurEffect { Radius = 4, KernelType = KernelType.Gaussian },
+                        Effect = new BlurEffect { Radius = 5, KernelType = KernelType.Gaussian },
                     };
                     _orbitPool.Add(dot);
                     _canvas.Children.Add(dot);
                     _orbitAngle[i]     = rng.NextDouble() * TwoPi;
-                    _orbitRadius[i]    = 95 + rng.NextDouble() * 235;
+                    _orbitRadius[i]    = OrbitRInner + rng.NextDouble() * (OrbitROuter - OrbitRInner);
                     _orbitSpeed[i]     = 0.18 + rng.NextDouble() * 0.55;
-                    _orbitSize[i]      = 1.6 + rng.NextDouble() * 3.4;
+                    _orbitSize[i]      = 1.8 + rng.NextDouble() * 3.8;
                     _orbitBaseAlpha[i] = 0.35 + rng.NextDouble() * 0.55;
                     // 离视界近的偏白热,远的偏冷
-                    double t = (_orbitRadius[i] - 95.0) / 235.0;
+                    double t = (_orbitRadius[i] - OrbitRInner) / (OrbitROuter - OrbitRInner);
                     byte r = (byte)(255 * (1 - t * 0.55));
                     byte g = (byte)(_warm ? (200 - t * 60) : (180 + t * 40));
                     byte b = (byte)(_warm ? (90 + t * 60)  : (255 - t * 30));
@@ -572,41 +613,33 @@ namespace MemoryBlackHole.Views
                     dot.Width = dot.Height = _orbitSize[i];
                 }
 
-                // 7) 喷发池(预创建,初始不可见)
+                // 7) 喷发粒子池(24 颗:每颗一个 Ellipse 头部 + 一条 Polyline 拖尾)
                 for (int i = 0; i < BurstPoolSize; i++)
                 {
-                    var p = new Ellipse { IsHitTestVisible = false, Opacity = 0 };
-                    p.Effect = new BlurEffect { Radius = 6, KernelType = KernelType.Gaussian };
-                    _burstPool.Add(p);
-                    _canvas.Children.Add(p);
-                    _burstAlive[i] = false;
-                }
-            }
+                    var head = new Ellipse { IsHitTestVisible = false, Opacity = 0 };
+                    head.Effect = new BlurEffect { Radius = 6, KernelType = KernelType.Gaussian };
+                    _burstPool.Add(head);
 
-            private void AddDiskRing(double width, double height, double rotation, string color, double speed, double thickness)
-            {
-                var brush = Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)));
-                var ring = new Ellipse
-                {
-                    Width = width, Height = height,
-                    Stroke = brush,
-                    StrokeThickness = thickness,
-                    IsHitTestVisible = false,
-                    Opacity = 0.42,
-                    RenderTransformOrigin = new Point(0.5, 0.5),
-                    RenderTransform = new RotateTransform(rotation),
-                };
-                ring.Effect = new DropShadowEffect
-                {
-                    Color = ((SolidColorBrush)ring.Stroke).Color,
-                    BlurRadius = 28,
-                    ShadowDepth = 0,
-                    Opacity = 0.55,
-                };
-                _canvas.Children.Add(ring);
-                _rings.Add(ring);
-                _ringRotations.Add((RotateTransform)ring.RenderTransform);
-                _ringSpeeds.Add(speed);
+                    var trail = new Polyline
+                    {
+                        IsHitTestVisible = false,
+                        Opacity = 0,
+                        StrokeThickness = 2.2,
+                        StrokeLineJoin = PenLineJoin.Round,
+                        StrokeStartLineCap = PenLineCap.Round,
+                        StrokeEndLineCap = PenLineCap.Round,
+                    };
+                    trail.Effect = new BlurEffect { Radius = 3, KernelType = KernelType.Gaussian };
+                    var pts = new PointCollection();
+                    for (int k = 0; k < TrailLen; k++) pts.Add(new Point(0, 0));
+                    trail.Points = pts;
+                    _burstTrails.Add(trail);
+
+                    _canvas.Children.Add(trail);
+                    _canvas.Children.Add(head);
+                    _burstAlive[i] = false;
+                    _burstTrailHead[i] = 0;
+                }
             }
 
             private static System.Windows.Shapes.Path MakeJetPath(double halfWidth, double tipY, bool warm)
@@ -627,7 +660,7 @@ namespace MemoryBlackHole.Views
                 };
                 Color hot = warm ? Color.FromRgb(0xFF, 0x9A, 0x40)
                                  : Color.FromRgb(0x7A, 0xC8, 0xFF);
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(180, hot.R, hot.G, hot.B), 0.0));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(190, hot.R, hot.G, hot.B), 0.0));
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0,   hot.R, hot.G, hot.B), 1.0));
                 Freeze(gradient);
                 pg.Fill = gradient;
@@ -658,46 +691,84 @@ namespace MemoryBlackHole.Views
             public void PlayInward() => StartBurst(inward: true);
             public void PlayOutward() => StartBurst(inward: false);
 
+            /// <summary>
+            /// 触发吸入/吐出的喷发动画。
+            /// 吸入:粒子沿对数螺线 r = R0 * exp(-b * t) 从外圈加速向视界收敛(越近越快、越亮)。
+            /// 吐出:粒子从视界沿双极喷流主轴(8 颗)+ 径向扇形(12 颗)爆发,中心先亮闪,粒子拖尾变淡。
+            /// </summary>
             private void StartBurst(bool inward)
             {
-                // 抬升中心视界亮度
                 _pulse = 1.0;
                 _pulseDecay = 1.4;
 
+                // 决定要生成多少颗
+                int target = inward ? 12 : 20;
                 int spawned = 0;
-                for (int i = 0; i < BurstPoolSize && spawned < 12; i++)
+                for (int i = 0; i < BurstPoolSize && spawned < target; i++)
                 {
                     if (_burstAlive[i]) continue;
                     _burstAlive[i] = true;
                     _burstAge[i] = 0;
-                    _burstLife[i] = 0.9 + (spawned * 0.04);
+                    _burstLife[i] = inward
+                        ? 1.1 + (spawned * 0.05)               // 1.1 ~ 1.65 秒
+                        : 1.3 + (spawned * 0.04);              // 1.3 ~ 2.05 秒
+                    _burstBaseSize[i] = 3.5 + (spawned % 4) * 1.6;
+                    _burstBaseR[i]    = 0;
+                    _burstBaseA[i]    = 0;
+                    _burstSpiralB[i]  = 0;
+                    _burstVX[i]       = 0;
+                    _burstVY[i]       = 0;
+
                     if (inward)
                     {
-                        // 吸入:从外向中心螺旋坍缩
-                        double a = (spawned / 12.0) * TwoPi;
-                        double r = 320 + (spawned % 3) * 18;
-                        _burstStartX[i] = Math.Cos(a) * r;
-                        _burstStartY[i] = Math.Sin(a) * r * 0.55;
-                        _burstVX[i] = -Math.Cos(a) * 380;
-                        _burstVY[i] = -Math.Sin(a) * 380 * 0.55;
+                        // 吸入:对数螺线 r = R0 * exp(-b * theta),b 越大越快向心
+                        _burstBaseA[i]   = (spawned / 12.0) * TwoPi + (i % 3) * 0.4;
+                        _burstBaseR[i]   = SpawnRBase + (spawned % 3) * 18;
+                        _burstSpiralB[i] = 0.22 + (spawned % 3) * 0.04;   // 0.22 ~ 0.30
                     }
                     else
                     {
-                        // 吐出:从中心沿双极喷流方向爆发
-                        bool up = (spawned % 2) == 0;
-                        double spread = ((spawned % 6) / 6.0 - 0.5) * 0.35;
-                        _burstStartX[i] = spread * 40;
-                        _burstStartY[i] = up ? -8 : 8;
-                        _burstVX[i] = spread * 80;
-                        _burstVY[i] = up ? -560 : 560;
+                        // 吐出:交替双极主轴 + 径向扇形
+                        bool axial = spawned < 8;
+                        if (axial)
+                        {
+                            // 8 颗沿双极喷流主轴上下爆发,加 1°~4° 水平偏移
+                            bool up = (spawned % 2) == 0;
+                            double spread = ((spawned / 2) - 1.5) * 0.04;   // -0.06 ~ 0.06 rad
+                            _burstBaseA[i] = spread;
+                            _burstBaseR[i] = 0;
+                            _burstVX[i] = Math.Sin(spread) * 90;
+                            _burstVY[i] = up ? -820 : 820;
+                        }
+                        else
+                        {
+                            // 12 颗沿径向扇形爆发(多角度)
+                            int fanIdx = spawned - 8;
+                            double a = (fanIdx / 12.0) * TwoPi;
+                            _burstBaseA[i] = a;
+                            _burstBaseR[i] = 0;
+                            _burstVX[i] = Math.Cos(a) * 520;
+                            _burstVY[i] = Math.Sin(a) * 520 * 0.55;
+                        }
                     }
-                    _burstBaseSize[i] = 3.0 + (spawned % 4) * 1.4;
-                    var p = _burstPool[i];
-                    p.Width = p.Height = _burstBaseSize[i];
-                    p.Fill = Freeze(new SolidColorBrush(_warm
-                        ? Color.FromRgb(0xFF, 0xC2, 0x70)
-                        : Color.FromRgb(0xB8, 0xE8, 0xFF)));
-                    p.Opacity = 0.95;
+
+                    // 颜色:暖/冷一致
+                    var head = _burstPool[i];
+                    head.Width = head.Height = _burstBaseSize[i];
+                    head.Fill = Freeze(new SolidColorBrush(_warm
+                        ? Color.FromRgb(0xFF, 0xD2, 0x80)
+                        : Color.FromRgb(0xCC, 0xEC, 0xFF)));
+                    head.Opacity = 0.0;   // 喷发开始时 0,首帧起才渐入
+
+                    // 拖尾初始化:全部填 (0,0)
+                    var trail = _burstTrails[i];
+                    var pts = trail.Points;
+                    for (int k = 0; k < TrailLen; k++) pts[k] = new Point(0, 0);
+                    trail.Stroke = Freeze(new SolidColorBrush(_warm
+                        ? Color.FromArgb(220, 0xFF, 0xB0, 0x60)
+                        : Color.FromArgb(220, 0x9C, 0xD8, 0xFF)));
+                    trail.Opacity = 0.0;
+                    _burstTrailHead[i] = 0;
                     spawned++;
                 }
             }
@@ -707,20 +778,18 @@ namespace MemoryBlackHole.Views
                 _time += delta;
                 if (_pulse > 0) _pulse = Math.Max(0, _pulse - _pulseDecay * delta);
                 double coreGlowOpacity   = 0.55 + _pulse * 0.40;
-                double photonRingOpacity = 0.75 + _pulse * 0.25;
+                double photonRingOpacity = 0.78 + _pulse * 0.22;
                 double eventGlow         = 0.85 + _pulse * 0.20;
+                double diskOpacity       = 0.32 + _pulse * 0.18;
+                double jetOpacity        = 0.18 + _pulse * 0.55;
 
                 double cx = _canvas.ActualWidth  > 0 ? _canvas.ActualWidth  / 2 : 640;
                 double cy = _canvas.ActualHeight > 0 ? _canvas.ActualHeight / 2 : 370;
 
-                // 1) 吸积盘 4 层独立旋转 + 上下轻微正弦漂移
-                for (int i = 0; i < _rings.Count; i++)
-                {
-                    _ringRotations[i].Angle += _ringSpeeds[i] * delta * 50.0;
-                    var ring = _rings[i];
-                    Canvas.SetLeft(ring, cx - ring.Width / 2);
-                    Canvas.SetTop(ring,  cy - ring.Height / 2 + Math.Sin(_time * 0.6 + i) * 2.4);
-                }
+                // 1) 吸积盘柔光环(无旋转,慢呼吸)
+                double breath = 1.0 + Math.Sin(_time * 0.6) * 0.025;
+                LayoutCentered(_diskHalo, cx, cy, breath * (1.0 + _pulse * 0.10));
+                _diskHalo.Opacity = diskOpacity;
 
                 // 2) 中心组件居中,吸入/吐出时辉光短暂放大
                 double scale = 1.0 + _pulse * 0.10;
@@ -732,7 +801,6 @@ namespace MemoryBlackHole.Views
                 _coreGlow.Opacity = coreGlowOpacity;
 
                 // 3) 双极喷流
-                double jetOpacity = 0.18 + _pulse * 0.55;
                 _jetTop.Opacity    = jetOpacity;
                 _jetBottom.Opacity = jetOpacity;
                 Canvas.SetLeft(_jetTop,    cx - _jetTop.Width    / 2);
@@ -740,14 +808,14 @@ namespace MemoryBlackHole.Views
                 Canvas.SetLeft(_jetBottom, cx - _jetBottom.Width / 2);
                 Canvas.SetTop(_jetBottom,  cy);
 
-                // 4) 稳定吸积粒子(公转 + 极慢向心 + Doppler 增亮)
+                // 4) 稳定吸积粒子(公转 + 极慢向心 + Doppler 增亮,半径 1.5x)
                 for (int i = 0; i < OrbitPoolSize; i++)
                 {
                     _orbitAngle[i] += _orbitSpeed[i] * delta;
                     _orbitRadius[i] -= delta * (4 + i % 5) * 0.7;
-                    if (_orbitRadius[i] < 92)
+                    if (_orbitRadius[i] < OrbitResetR)
                     {
-                        _orbitRadius[i] = 320 + (i % 7) * 6;
+                        _orbitRadius[i] = OrbitROuter - 30 + (i % 7) * 6;
                     }
                     double r = _orbitRadius[i];
                     double x = Math.Cos(_orbitAngle[i]) * r;
@@ -760,7 +828,7 @@ namespace MemoryBlackHole.Views
                     Canvas.SetTop(dot,  cy + y - dot.Height / 2);
                 }
 
-                // 5) 喷发粒子
+                // 5) 喷发粒子(吸入:对数螺线 + 拖尾;吐出:双极 + 径向 + 拖尾)
                 for (int i = 0; i < BurstPoolSize; i++)
                 {
                     if (!_burstAlive[i]) continue;
@@ -770,14 +838,68 @@ namespace MemoryBlackHole.Views
                     {
                         _burstAlive[i] = false;
                         _burstPool[i].Opacity = 0;
+                        _burstTrails[i].Opacity = 0;
                         continue;
                     }
-                    double ease = 1 - Math.Pow(1 - t, 2);
-                    double bx = _burstStartX[i] + _burstVX[i] * ease * (0.55 * _burstLife[i]);
-                    double by = _burstStartY[i] + _burstVY[i] * ease * (0.55 * _burstLife[i]);
-                    _burstPool[i].Opacity = (1 - t) * 0.95;
+                    double bx, by;
+                    if (_burstSpiralB[i] > 0)
+                    {
+                        // 吸入:对数螺线 r = R0 * exp(-b * t)
+                        // t=0 半径最大, 越靠中心越快
+                        double r = _burstBaseR[i] * Math.Exp(-_burstSpiralB[i] * t * 6.0);
+                        double a = _burstBaseA[i] + t * 2.4;  // 每帧绕 2.4 弧度,拖出螺线
+                        bx = Math.Cos(a) * r;
+                        by = Math.Sin(a) * r * 0.55;          // 椭圆压扁
+                    }
+                    else
+                    {
+                        // 吐出:线性匀速,前快后慢
+                        double ease = 1 - Math.Pow(1 - t, 2);
+                        bx = _burstVX[i] * ease;
+                        by = _burstVY[i] * ease;
+                    }
+                    // 头部透明度:吸入越靠近中心越亮(模拟辐射激增),吐出从亮到淡
+                    double headOpacity;
+                    if (_burstSpiralB[i] > 0)
+                    {
+                        // 吸入:0~0.6 渐入,0.6~1.0 渐出,峰值在 0.7
+                        headOpacity = t < 0.6 ? (t / 0.6) : Math.Max(0, 1.0 - (t - 0.6) / 0.4);
+                        // 越靠近中心越亮
+                        headOpacity = Math.Min(1.0, headOpacity * (0.7 + 0.3 * t));
+                    }
+                    else
+                    {
+                        // 吐出:0~0.15 渐入,0.15~1.0 渐出
+                        headOpacity = t < 0.15 ? (t / 0.15) : Math.Max(0, 1.0 - (t - 0.15) / 0.85);
+                    }
+                    // 头部椭圆本身略微放大(吸入越近越大)
+                    if (_burstSpiralB[i] > 0)
+                    {
+                        double s = _burstBaseSize[i] * (1.0 + t * 0.8);
+                        _burstPool[i].Width = _burstPool[i].Height = s;
+                    }
+
+                    // 拖尾:环形缓冲,记录最近 TrailLen 个位置
+                    int head = _burstTrailHead[i];
+                    int baseIdx = i * TrailLen;
+                    _burstTrailX[baseIdx + head] = bx;
+                    _burstTrailY[baseIdx + head] = by;
+                    _burstTrailHead[i] = (head + 1) % TrailLen;
+
+                    // 写入 Polyline.Points(从最旧到最新顺序:head → head-1 → ... → head+1)
+                    var pts = _burstTrails[i].Points;
+                    for (int k = 0; k < TrailLen; k++)
+                    {
+                        int srcIdx = (head + 1 + k) % TrailLen;   // 跳过当前点(头部自己),从次新点开始
+                        double px = _burstTrailX[baseIdx + srcIdx];
+                        double py = _burstTrailY[baseIdx + srcIdx];
+                        pts[k] = new Point(cx + px, cy + py);
+                    }
+                    _burstTrails[i].Opacity = headOpacity * 0.85;
+
                     Canvas.SetLeft(_burstPool[i], cx + bx - _burstPool[i].Width / 2);
                     Canvas.SetTop(_burstPool[i],  cy + by - _burstPool[i].Height / 2);
+                    _burstPool[i].Opacity = headOpacity;
                 }
             }
 
@@ -789,5 +911,6 @@ namespace MemoryBlackHole.Views
                 Canvas.SetTop(el,  cy - h / 2);
             }
         }
+
     }
 }
