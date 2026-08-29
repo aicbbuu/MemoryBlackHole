@@ -199,22 +199,27 @@ namespace MemoryBlackHole.Services
             using var transaction = conn.BeginTransaction();
             try
             {
-                using var cmd = conn.CreateCommand();
-                cmd.Transaction = transaction;
-                cmd.CommandText = @"
-                    INSERT INTO Items(Type, Title, Content, FilePath, FileData,
-                                      OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                    VALUES ($type, $title, $content, NULL, zeroblob($blobSize),
-                            $ofn, $fsize, $note, $tags, $created, $fav);
-                    SELECT last_insert_rowid();";
-                AddItemParameters(cmd, item);
-                cmd.Parameters.AddWithValue("$blobSize", item.FileSizeBytes);
-                item.Id = (long)cmd.ExecuteScalar()!;
+                // 先释放 INSERT 命令，再打开增量 BLOB；否则 SQLite 会保留活动语句而拒绝提交事务。
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = @"
+                        INSERT INTO Items(Type, Title, Content, FilePath, FileData,
+                                          OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
+                        VALUES ($type, $title, $content, NULL, zeroblob($blobSize),
+                                $ofn, $fsize, $note, $tags, $created, $fav);
+                        SELECT last_insert_rowid();";
+                    AddItemParameters(cmd, item);
+                    cmd.Parameters.AddWithValue("$blobSize", item.FileSizeBytes);
+                    item.Id = (long)cmd.ExecuteScalar()!;
+                }
 
                 // Microsoft.Data.Sqlite 官方支持的增量 BLOB API：只保留 CopyTo 的缓冲区于内存。
-                using var input = File.OpenRead(sourcePath);
-                using var output = new SqliteBlob(conn, "Items", "FileData", item.Id, readOnly: false);
-                input.CopyTo(output, 1024 * 1024); // 1MiB buffer
+                using (var input = File.OpenRead(sourcePath))
+                using (var output = new SqliteBlob(conn, "Items", "FileData", item.Id, readOnly: false))
+                {
+                    input.CopyTo(output, 1024 * 1024); // 1MiB buffer
+                }
                 transaction.Commit();
                 item.FilePath = null;
                 item.FileData = null;
