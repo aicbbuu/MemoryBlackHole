@@ -95,8 +95,13 @@
                                 </Grid.RowDefinitions>
                                 <Track x:Name="PART_Track" Grid.Row="0">
                                     <Track.Thumb>
-                                        <Thumb Background="#2A3360" BorderThickness="0"
-                                               CornerRadius="4" Width="6" Height="Auto"/>
+                                        <Thumb Background="#2A3360" BorderThickness="0">
+                                            <Thumb.Template>
+                                                <ControlTemplate TargetType="Thumb">
+                                                    <Border Background="#2A3360" CornerRadius="4" Width="6" Height="Auto"/>
+                                                </ControlTemplate>
+                                            </Thumb.Template>
+                                        </Thumb>
                                     </Track.Thumb>
                                 </Track>
                             </Grid>
