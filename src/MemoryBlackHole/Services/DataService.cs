@@ -17,11 +17,18 @@ namespace MemoryBlackHole.Services
     /// </summary>
     public class DataService
     {
+        /// <summary>单个 SQLite BLOB 的最大文件大小；超过此大小改为外部副本。</summary>
+        public const long LargeFileThreshold = 1L * 1024 * 1024 * 1024; // 1 GiB
+
         private readonly string _dbPath;
         private readonly string _connectionString;
         private readonly string _fileStoreDir;
+        private readonly long _largeFileThreshold;
 
-        public DataService(string? dataDir = null)
+        /// <summary>
+        /// 创建本地存储服务。默认文件大小阈值为 1GiB；可传入较小阈值用于自动化测试。
+        /// </summary>
+        public DataService(string? dataDir = null, long largeFileThreshold = LargeFileThreshold)
         {
             // 默认存到 EXE 同目录下 .memoryblackhole/
             // Environment.ProcessPath 在单文件发布时返回真实 EXE 路径
@@ -29,8 +36,12 @@ namespace MemoryBlackHole.Services
                 Path.GetDirectoryName(
                     Environment.ProcessPath ?? AppContext.BaseDirectory)!,
                 ".memoryblackhole");
+            if (largeFileThreshold < 0)
+                throw new ArgumentOutOfRangeException(nameof(largeFileThreshold));
+
             Directory.CreateDirectory(dataDir);
 
+            _largeFileThreshold = largeFileThreshold;
             _dbPath = Path.Combine(dataDir, "memory.db");
             _fileStoreDir = Path.Combine(dataDir, "files");
             Directory.CreateDirectory(_fileStoreDir);

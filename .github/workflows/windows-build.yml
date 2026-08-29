@@ -27,7 +27,12 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore
-        run: dotnet restore src/MemoryBlackHole/MemoryBlackHole.csproj
+        run: |
+          dotnet restore src/MemoryBlackHole/MemoryBlackHole.csproj
+          dotnet restore tests/MemoryBlackHole.StorageTests/MemoryBlackHole.StorageTests.csproj
+
+      - name: Verify hybrid file storage regression tests
+        run: dotnet run --project tests/MemoryBlackHole.StorageTests/MemoryBlackHole.StorageTests.csproj -c Release
 
       - name: Publish win-x86 self-contained single-file EXE
         run: |
