@@ -12,14 +12,16 @@ namespace MemoryBlackHole.Views
     public partial class PreviewMemoryDialog : Window
     {
         private readonly MemoryItem _item;
+        private readonly DataService? _service;
         private string? _tempPreview;
         public bool EditRequested { get; private set; }
         public bool DeleteRequested { get; private set; }
 
-        public PreviewMemoryDialog(MemoryItem item)
+        public PreviewMemoryDialog(MemoryItem item, DataService? service = null)
         {
             InitializeComponent();
             _item = item;
+            _service = service;
             TitleText.Text = string.IsNullOrWhiteSpace(item.Title) ? item.DisplayText : item.Title;
             MetaText.Text = $"{item.TypeName}  ·  {item.CreatedAt:yyyy-MM-dd HH:mm}";
             ShowContent();
@@ -67,6 +69,7 @@ namespace MemoryBlackHole.Views
 
         private string? GetPreviewPath()
         {
+            // 情况1：已加载的 BLOB 数据（小文件或图片）
             if (_item.FileData != null && _item.FileData.Length > 0)
             {
                 string ext = Path.GetExtension(_item.OriginalFileName ?? "") ?? ".bin";
@@ -74,7 +77,21 @@ namespace MemoryBlackHole.Views
                 File.WriteAllBytes(_tempPreview, _item.FileData);
                 return _tempPreview;
             }
-            return File.Exists(_item.FilePath) ? _item.FilePath : null;
+
+            // 情况2：外部文件（>1GB 的存储方式）
+            if (_item.FilePath != null && File.Exists(_item.FilePath))
+                return _item.FilePath;
+
+            // 情况3：BLOB 数据未加载（搜索时跳过的 >50MB 文件）→ 流式提取
+            if (_service != null && _item.Id > 0 && _service.HasBlobData(_item.Id))
+            {
+                string ext = Path.GetExtension(_item.OriginalFileName ?? "") ?? ".bin";
+                _tempPreview = Path.Combine(Path.GetTempPath(), $"MemoryBlackHole_{Guid.NewGuid():N}{ext}");
+                _service.ExtractBlobToFile(_item.Id, _tempPreview);
+                return _tempPreview;
+            }
+
+            return null;
         }
 
         private void OpenFile_Click(object sender, RoutedEventArgs e)

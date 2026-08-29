@@ -59,6 +59,7 @@ artifacts/installer/MemoryBlackHole-Setup-2.0.2-win-x86.exe
 
 ```text
 .memoryblackhole\memory.db
+.memoryblackhole\files\        （大文件存放目录，>1GB 的文件存在这里）
 ```
 
 选择当前用户安装位置是为了让程序具备正常写入数据库的权限，避免 `Program Files` 权限问题。

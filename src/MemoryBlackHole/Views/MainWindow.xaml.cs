@@ -177,19 +177,15 @@ namespace MemoryBlackHole.Views
 
             for (int i = 0; i < dialog.FilePaths.Count; i++)
             {
-                byte[] fileData = File.ReadAllBytes(dialog.FilePaths[i]);
-                _service.Add(new MemoryItem
+                _service.AddFile(new MemoryItem
                 {
                     Type = dialog.SelectedType,
                     Title = dialog.OriginalFileNames[i],
                     Content = dialog.OriginalFileNames[i],
-                    FilePath = null,
-                    FileData = fileData,
                     Note = null,
                     Tags = dialog.Tags,
-                    OriginalFileName = dialog.OriginalFileNames[i],
-                    FileSizeBytes = dialog.FileSizes[i]
-                });
+                    OriginalFileName = dialog.OriginalFileNames[i]
+                }, dialog.FilePaths[i]);
             }
 
             _frontSpace.PlayInward();
@@ -301,23 +297,18 @@ namespace MemoryBlackHole.Views
             }
             else
             {
-                // 非文本：读取文件字节直接存入 SQLite BLOB
+                // 非文本：流式写入 SQLite BLOB 或外部文件（避免 OOM）
                 for (int i = 0; i < dialog.FilePaths.Count; i++)
                 {
-                    byte[] fileData = File.ReadAllBytes(dialog.FilePaths[i]);
-
-                    _service.Add(new MemoryItem
+                    _service.AddFile(new MemoryItem
                     {
                         Type = dialog.SelectedType,
                         Title = dialog.OriginalFileNames[i],
                         Content = dialog.OriginalFileNames[i],
-                        FilePath = null,
-                        FileData = fileData,
                         Note = null,
                         Tags = dialog.Tags,
-                        OriginalFileName = dialog.OriginalFileNames[i],
-                        FileSizeBytes = dialog.FileSizes[i]
-                    });
+                        OriginalFileName = dialog.OriginalFileNames[i]
+                    }, dialog.FilePaths[i]);
                 }
             }
 
@@ -333,7 +324,7 @@ namespace MemoryBlackHole.Views
                     ? presenter.Content as MemoryItem
                     : (source as FrameworkElement)?.DataContext as MemoryItem;
                 if (item == null) return;
-                var preview = new PreviewMemoryDialog(item) { Owner = this };
+                var preview = new PreviewMemoryDialog(item, _service) { Owner = this };
                 preview.ShowDialog();
                 if (preview.DeleteRequested)
                 {
