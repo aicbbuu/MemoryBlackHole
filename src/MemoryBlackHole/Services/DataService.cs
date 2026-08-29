@@ -20,10 +20,6 @@ namespace MemoryBlackHole.Services
         private readonly string _dbPath;
         private readonly string _connectionString;
         private readonly string _fileStoreDir;
-        /// <summary>超过此大小的文件存外部目录而非 SQLite BLOB</summary>
-        private const long LargeFileThreshold = 1L * 1024 * 1024 * 1024; // 1 GB
-        /// <summary>搜索结果中不加载超过此大小的 FileData（避免 OOM）</summary>
-        private const long SearchBlobThreshold = 50L * 1024 * 1024; // 50 MB
 
         public DataService(string? dataDir = null)
         {
@@ -168,77 +164,43 @@ namespace MemoryBlackHole.Services
         }
 
         /// <summary>
-        /// 新增一条文件类记忆（非文本/链接）。根据文件大小选择存储方式：
-        /// ≤1GB → 流式写入 SQLite BLOB（不产生大 Byte[]，避免 OOM）；
-        /// >1GB → 复制到 .memoryblackhole/files/ 目录，DB 只存文件路径。
+        /// 新增一条文件类记忆（非文本/链接）。
+        /// 文件复制到 .memoryblackhole/files/ 目录，数据库只存文件路径（避免 OOM）。
         /// </summary>
         public void AddFile(MemoryItem item, string sourcePath)
         {
             var fileInfo = new FileInfo(sourcePath);
             item.FileSizeBytes = fileInfo.Length;
 
-            if (fileInfo.Length <= LargeFileThreshold)
-            {
-                // ≤1GB：流式写入 SQLite BLOB（分块复制，不产生大 Byte[]）
-                using var conn = new SqliteConnection(_connectionString);
-                conn.Open();
+            // 复制到外部目录
+            var ext = Path.GetExtension(sourcePath);
+            var fileName = $"{Guid.NewGuid():N}{ext}";
+            var destPath = Path.Combine(_fileStoreDir, fileName);
+            File.Copy(sourcePath, destPath, overwrite: false);
 
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = @"
-                    INSERT INTO Items(Type, Title, Content, FilePath, FileData,
-                                      OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                    VALUES ($type, $title, $content, NULL, zeroblob($size),
-                            $ofn, $fsize, $note, $tags, $created, $fav);
-                    SELECT last_insert_rowid();";
-                cmd.Parameters.AddWithValue("$type", item.Type);
-                cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$size", item.FileSizeBytes);
-                cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
-                cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$tags", (object?)item.Tags ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$created", item.CreatedAt.ToString("o"));
-                cmd.Parameters.AddWithValue("$fav", item.IsFavorite ? 1 : 0);
-                item.Id = (long)cmd.ExecuteScalar()!;
+            item.FilePath = destPath;
+            item.FileData = null;
 
-                // 流式写入 BLOB（4KB 分块，不产生大连续内存）
-                using var blobStream = conn.OpenBlob("Items", "FileData", item.Id, readOnly: false);
-                using var fileStream = File.OpenRead(sourcePath);
-                fileStream.CopyTo(blobStream);
-            }
-            else
-            {
-                // >1GB：复制到外部目录，DB 只存文件路径
-                var ext = Path.GetExtension(sourcePath);
-                var fileName = $"{Guid.NewGuid():N}{ext}";
-                var destPath = Path.Combine(_fileStoreDir, fileName);
-                File.Copy(sourcePath, destPath, overwrite: false);
-
-                item.FilePath = destPath;
-                item.FileData = null;
-
-                using var conn = new SqliteConnection(_connectionString);
-                conn.Open();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = @"
-                    INSERT INTO Items(Type, Title, Content, FilePath, FileData,
-                                      OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                    VALUES ($type, $title, $content, $file, NULL,
-                            $ofn, $fsize, $note, $tags, $created, $fav);
-                    SELECT last_insert_rowid();";
-                cmd.Parameters.AddWithValue("$type", item.Type);
-                cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$file", destPath);
-                cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
-                cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$tags", (object?)item.Tags ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$created", item.CreatedAt.ToString("o"));
-                cmd.Parameters.AddWithValue("$fav", item.IsFavorite ? 1 : 0);
-                item.Id = (long)cmd.ExecuteScalar()!;
-            }
+            using var conn = new SqliteConnection(_connectionString);
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT INTO Items(Type, Title, Content, FilePath, FileData,
+                                  OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
+                VALUES ($type, $title, $content, $file, NULL,
+                        $ofn, $fsize, $note, $tags, $created, $fav);
+                SELECT last_insert_rowid();";
+            cmd.Parameters.AddWithValue("$type", item.Type);
+            cmd.Parameters.AddWithValue("$title", (object?)item.Title ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$file", destPath);
+            cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
+            cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tags", (object?)item.Tags ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$created", item.CreatedAt.ToString("o"));
+            cmd.Parameters.AddWithValue("$fav", item.IsFavorite ? 1 : 0);
+            item.Id = (long)cmd.ExecuteScalar()!;
         }
 
         /// <summary>按关键词全文搜索。中文/CJK 用 LIKE 模糊匹配（字节级 100% 可靠）；
@@ -309,7 +271,7 @@ namespace MemoryBlackHole.Services
                     Content = rd.IsDBNull(rd.GetOrdinal("Content")) ? null : rd.GetString(rd.GetOrdinal("Content")),
                     FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
                     FileData = rd.IsDBNull(rd.GetOrdinal("FileData")) ? null :
-                        rd.GetInt64(rd.GetOrdinal("FileSizeBytes")) <= SearchBlobThreshold ? rd.GetFieldValue<byte[]>(rd.GetOrdinal("FileData")) : null,
+                        rd.GetInt64(rd.GetOrdinal("FileSizeBytes")) <= 50L * 1024 * 1024 ? rd.GetFieldValue<byte[]>(rd.GetOrdinal("FileData")) : null,
                     OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
                     FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
                     Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),
@@ -444,7 +406,7 @@ namespace MemoryBlackHole.Services
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
-        /// <summary>判断指定记忆是否有未加载的 BLOB 数据。</summary>
+        /// <summary>判断指定记忆是否有 BLOB 数据（兼容旧版数据库）。</summary>
         public bool HasBlobData(long id)
         {
             using var conn = new SqliteConnection(_connectionString);
@@ -455,14 +417,26 @@ namespace MemoryBlackHole.Services
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
-        /// <summary>将 BLOB 数据流式提取到临时文件（不产生大 Byte[]，避免 OOM）。</summary>
+        /// <summary>将 BLOB 数据流式提取到临时文件（分块读取，不产生大 Byte[]）。</summary>
         public void ExtractBlobToFile(long id, string outputPath)
         {
             using var conn = new SqliteConnection(_connectionString);
             conn.Open();
-            using var blob = conn.OpenBlob("Items", "FileData", id, readOnly: true);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT FileData FROM Items WHERE Id=$id";
+            cmd.Parameters.AddWithValue("$id", id);
+            using var reader = cmd.ExecuteReader(System.Data.CommandBehavior.SequentialAccess);
+            if (!reader.Read()) return;
+            byte[] buffer = new byte[65536]; // 64KB chunks
+            long offset = 0;
             using var fs = File.Create(outputPath);
-            blob.CopyTo(fs);
+            while (true)
+            {
+                long read = reader.GetBytes(0, offset, buffer, 0, buffer.Length);
+                if (read == 0) break;
+                fs.Write(buffer, 0, (int)read);
+                offset += read;
+            }
         }
 
         private void SaveSetting(string key, string value)
