@@ -43,6 +43,10 @@ namespace MemoryBlackHole.Services
         // 写操作(AddFile/Update/Delete)仍用 using 短连接,保证写并发安全
         private SqliteConnection? _searchConn;
         private readonly object _searchConnLock = new();
+        // v3.0.9: Settings 表(SaveSetting/ReadSetting)专用长连接,启动/密码验证时省冷启 ~30ms
+        // 与 Search 同一模式:lazy init + lock,线程安全
+        private SqliteConnection? _settingConn;
+        private readonly object _settingConnLock = new();
 
         /// <summary>
         /// 创建本地存储服务。默认文件大小阈值为 1GiB；可传入较小阈值用于自动化测试。
@@ -148,13 +152,15 @@ namespace MemoryBlackHole.Services
             }
 
             // v1.0.1: FTS5 改用 unicode61 分词器，CJK 每字为独立 token，配合逐字 AND 查询精准匹配
+            // v3.0.8: 加 prefix='1 2 3 4' 让 1~4 字符前缀都建索引,支持单字/单字母搜索
+            //   (默认 prefix='2 3 4' 跳过 1 字符索引,导致 "机" "a" 等单字搜不到)
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = @"
                     DROP TABLE IF EXISTS ItemsFts;
                     CREATE VIRTUAL TABLE ItemsFts USING fts5(
                         Title, Content, Note, Tags, Content='Items', Content_Rowid='Id',
-                        tokenize='unicode61'
+                        tokenize='unicode61', prefix='1 2 3 4'
                     );";
                 cmd.ExecuteNonQuery();
             }
@@ -205,8 +211,14 @@ namespace MemoryBlackHole.Services
         }
 
         /// <summary>新增一条记忆，返回自增Id。文件数据直接存入 SQLite BLOB。</summary>
+        /// <remarks>对 &gt; <see cref="LargeFileThreshold"/> 的 FileData 直接拒绝,防止 <see cref="Add(MemoryItem)"/>
+        /// 走 byte[] 整体拷贝导致 OOM;大文件应走 <see cref="AddFile(MemoryItem, string)"/> 分块流式路径。</remarks>
         public long Add(MemoryItem item)
         {
+            if (item.FileData != null && item.FileData.Length > LargeFileThreshold)
+                throw new ArgumentException(
+                    $"FileData 长度 {item.FileData.Length} 超过阈值 {LargeFileThreshold},请改用 AddFile 分块流式写入。",
+                    nameof(item));
             using var conn = new SqliteConnection(_connectionString);
             OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
@@ -391,11 +403,11 @@ namespace MemoryBlackHole.Services
                 string sql = "SELECT * FROM Items WHERE 1=1";
                 if (!string.IsNullOrEmpty(type)) sql += " AND Type=$type";
                 if (favorite == true) sql += " AND IsFavorite=1";
-                if (!string.IsNullOrEmpty(tag)) sql += " AND Tags GLOB $tagG";
+                if (!string.IsNullOrEmpty(tag)) sql += " AND LOWER(Tags) GLOB $tagG";   // v3.0.9: LOWER 让 tag 过滤大小写不敏感
                 sql += " ORDER BY CreatedAt DESC LIMIT 200";
                 cmd.CommandText = sql;
                 if (!string.IsNullOrEmpty(type)) cmd.Parameters.AddWithValue("$type", type);
-                if (!string.IsNullOrEmpty(tag)) cmd.Parameters.AddWithValue("$tagG", "*" + EscapeGlob(tag!) + "*");
+                if (!string.IsNullOrEmpty(tag)) cmd.Parameters.AddWithValue("$tagG", "*" + EscapeGlob(tag!.ToLowerInvariant()) + "*");
             }
             else
             {
@@ -410,13 +422,13 @@ namespace MemoryBlackHole.Services
                             WHERE ItemsFts MATCH $kw";
                 if (!string.IsNullOrEmpty(type)) sql += " AND i.Type=$type";
                 if (favorite == true) sql += " AND i.IsFavorite=1";
-                if (!string.IsNullOrEmpty(tag)) sql += " AND i.Tags GLOB $tagG";
+                if (!string.IsNullOrEmpty(tag)) sql += " AND LOWER(i.Tags) GLOB $tagG";   // v3.0.9: 同上
                 // 排序:bm25 相关性优先,CreatedAt 次之
                 sql += " ORDER BY bm25(ItemsFts), i.CreatedAt DESC LIMIT 200";
                 cmd.CommandText = sql;
                 cmd.Parameters.AddWithValue("$kw", BuildMatchQuery(trimmedKeyword!));
                 if (!string.IsNullOrEmpty(type)) cmd.Parameters.AddWithValue("$type", type);
-                if (!string.IsNullOrEmpty(tag)) cmd.Parameters.AddWithValue("$tagG", "*" + EscapeGlob(tag!) + "*");
+                if (!string.IsNullOrEmpty(tag)) cmd.Parameters.AddWithValue("$tagG", "*" + EscapeGlob(tag!.ToLowerInvariant()) + "*");
             }
 
             using var rd = cmd.ExecuteReader();
@@ -496,8 +508,6 @@ namespace MemoryBlackHole.Services
             return string.Join(" AND ", parts);
         }
 
-        
-
         public bool HasPassword()
         {
             using var conn = new SqliteConnection(_connectionString);
@@ -506,7 +516,7 @@ namespace MemoryBlackHole.Services
             cmd.CommandText = "SELECT COUNT(*) FROM Settings WHERE Key='password_hash'";
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
-    
+
         public void SetPassword(string password)
         {
             byte[] salt = RandomNumberGenerator.GetBytes(16);
@@ -592,6 +602,42 @@ namespace MemoryBlackHole.Services
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
+        /// <summary>
+        /// v3.0.9: 按 OriginalFileName + FileSizeBytes 查重(忽略 IsDeleted=1 的回收站项)。
+        /// 返回首个匹配项;无重复返回 null。仅对文件类(非 Text/Link)有效。
+        /// </summary>
+        public MemoryItem? FindDuplicate(string? originalFileName, long fileSizeBytes)
+        {
+            if (string.IsNullOrEmpty(originalFileName) || fileSizeBytes <= 0)
+                return null;
+            using var conn = new SqliteConnection(_connectionString);
+            OpenAndConfigure(conn);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"SELECT Id, Type, Title, Content, FilePath, FileData, OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite
+                                  FROM Items
+                                  WHERE IsDeleted = 0 AND OriginalFileName = $name AND FileSizeBytes = $size
+                                  ORDER BY CreatedAt DESC LIMIT 1";
+            cmd.Parameters.AddWithValue("$name", originalFileName);
+            cmd.Parameters.AddWithValue("$size", fileSizeBytes);
+            using var rd = cmd.ExecuteReader();
+            if (!rd.Read()) return null;
+            return new MemoryItem
+            {
+                Id = rd.GetInt64(rd.GetOrdinal("Id")),
+                Type = rd.GetString(rd.GetOrdinal("Type")),
+                Title = rd.IsDBNull(rd.GetOrdinal("Title")) ? null : rd.GetString(rd.GetOrdinal("Title")),
+                Content = rd.IsDBNull(rd.GetOrdinal("Content")) ? null : rd.GetString(rd.GetOrdinal("Content")),
+                FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
+                FileData = null,
+                OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
+                FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
+                Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),
+                Tags = rd.IsDBNull(rd.GetOrdinal("Tags")) ? null : rd.GetString(rd.GetOrdinal("Tags")),
+                CreatedAt = DateTime.Parse(rd.GetString(rd.GetOrdinal("CreatedAt"))),
+                IsFavorite = rd.GetInt64(rd.GetOrdinal("IsFavorite")) == 1
+            };
+        }
+
         /// <summary>将 BLOB 数据流式提取到临时文件（分块读取，不产生大 Byte[]）。</summary>
         public void ExtractBlobToFile(long id, string outputPath)
         {
@@ -614,10 +660,27 @@ namespace MemoryBlackHole.Services
             }
         }
 
+        /// <summary>取/打开 Settings 专用长连接(线程安全单例)。</summary>
+        private SqliteConnection GetOrOpenSettingConn()
+        {
+            lock (_settingConnLock)
+            {
+                if (_settingConn == null)
+                {
+                    _settingConn = new SqliteConnection(_connectionString);
+                    OpenAndConfigure(_settingConn);
+                }
+                else if (_settingConn.State != System.Data.ConnectionState.Open)
+                {
+                    OpenAndConfigure(_settingConn);
+                }
+                return _settingConn;
+            }
+        }
+
         private void SaveSetting(string key, string value)
         {
-            using var conn = new SqliteConnection(_connectionString);
-            OpenAndConfigure(conn);
+            var conn = GetOrOpenSettingConn();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "INSERT INTO Settings(Key,Value) VALUES($key,$value) ON CONFLICT(Key) DO UPDATE SET Value=$value";
             cmd.Parameters.AddWithValue("$key", key);
@@ -627,8 +690,7 @@ namespace MemoryBlackHole.Services
 
         private string? ReadSetting(string key)
         {
-            using var conn = new SqliteConnection(_connectionString);
-            OpenAndConfigure(conn);
+            var conn = GetOrOpenSettingConn();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT Value FROM Settings WHERE Key=$key";
             cmd.Parameters.AddWithValue("$key", key);
@@ -665,11 +727,13 @@ namespace MemoryBlackHole.Services
             using var conn = new SqliteConnection(_connectionString);
             OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
+            // v3.0.9: 加 WHERE IsDeleted=0 过滤(虽目前 UI 没回收站,IsDeleted 恒 0,但防未来)
             cmd.CommandText = @"
                 SELECT Type, COUNT(*), COALESCE(SUM(FileSizeBytes), 0)
-                FROM Items GROUP BY Type";
+                FROM Items WHERE IsDeleted = 0 GROUP BY Type";
             int total = 0, text = 0, image = 0, audio = 0, video = 0, file = 0;
             long totalBytes = 0;
+            // v3.0.9: 加 WHERE IsDeleted=0 过滤(虽目前 UI 没回收站,IsDeleted 恒 0,但防未来)
             using var rd = cmd.ExecuteReader();
             while (rd.Read())
             {

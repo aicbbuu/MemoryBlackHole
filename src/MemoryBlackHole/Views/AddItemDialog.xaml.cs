@@ -22,15 +22,20 @@ namespace MemoryBlackHole.Views
         /// <summary>多文件支持：文件大小列表。</summary>
         public List<long> FileSizes { get; private set; } = new();
 
-        /// <summary>文件校验：不限大小、不限数量。</summary>
-        private const long MaxFileSize = 10L * 1024 * 1024 * 1024; // 10 GB
-        private const long MaxTotalSize = 50L * 1024 * 1024 * 1024; // 50 GB
-        private const int MaxFileCount = 200;
+        // v3.0.9: 移除了未使用的 MaxFileSize / MaxTotalSize / MaxFileCount 三个常量
 
         public AddItemDialog()
         {
             InitializeComponent();
-            Loaded += (_, _) => ContentBox.Focus();
+            // v3.0.9: 拖入文件模式时 FilePanel 可见,ContentBox 是 Collapsed,
+            // 直接 Focus ContentBox 无效,应 Focus FileListBox(用户可立刻按方向键/Enter 选)
+            Loaded += (_, _) =>
+            {
+                if (FilePanel != null && FilePanel.Visibility == Visibility.Visible)
+                    FileListBox?.Focus();
+                else
+                    ContentBox.Focus();
+            };
         }
 
         /// <summary>预选文件的构造函数（拖拽添加用）。</summary>
@@ -50,8 +55,9 @@ namespace MemoryBlackHole.Views
                     || f.EndsWith(".m4a") || f.EndsWith(".ogg") => "Audio",
                 _ => "File"
             };
+            // v3.0.9: 改用 x:Name="TypePanel" 直接引用,替代反射式 ((WrapPanel)RText.Parent).Children
             // 选中对应的 radio
-            foreach (var child in ((WrapPanel)RText.Parent).Children)
+            foreach (var child in TypePanel.Children)
             {
                 if (child is System.Windows.Controls.RadioButton rb && rb.Tag?.ToString() == SelectedType)
                     rb.IsChecked = true;
@@ -88,6 +94,20 @@ namespace MemoryBlackHole.Views
                 ContentBox.ToolTip = "输入链接地址（如 https://github.com/）";
             else
                 ContentBox.ToolTip = "输入文本内容";
+            // v3.0.8: 类型切换时,若标签框为空,自动填入类型名作为默认标签(用户可继续追加)
+            if (TagsBox != null && string.IsNullOrWhiteSpace(TagsBox.Text))
+            {
+                TagsBox.Text = SelectedType switch
+                {
+                    "Text"  => "文本",
+                    "Image" => "图片",
+                    "Video" => "视频",
+                    "Audio" => "音频",
+                    "File"  => "文件",
+                    "Link"  => "链接",
+                    _       => "",
+                };
+            }
         }
 
         private void ChooseFile_Click(object sender, RoutedEventArgs e)

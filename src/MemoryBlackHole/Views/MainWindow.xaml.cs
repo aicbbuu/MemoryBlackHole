@@ -31,6 +31,21 @@ namespace MemoryBlackHole.Views
         // (连续点标签 / 连续打字 / 快速按 Enter 都被合并,避免无谓的 DB 查询)
         private readonly DispatcherTimer _searchDebouncer = new() { Interval = TimeSpan.FromMilliseconds(300) };
         private bool _searchPending;
+        // v3.0.8: 搜索范围提示预创建 brush(SolidColorBrush 创建后 Freeze 即可安全全局共享)
+        private static readonly Brush _globalScopeBrush = CreateFrozenBrush(Color.FromRgb(0x9D, 0x8B, 0xFF));
+        private static readonly Brush _tagScopeBrush    = CreateFrozenBrush(Color.FromRgb(0xFF, 0xB0, 0x60));
+        // v3.0.9: WindowFrame Clip 缓存 — resize 时只改 Rect,不 new RectangleGeometry
+        private RectangleGeometry? _windowFrameClip;
+        private static Brush CreateFrozenBrush(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            if (b.CanFreeze) b.Freeze();
+            return b;
+        }
+
+        // v3.0.9: 黑洞动画改用 DispatcherTimer 16ms 驱动(~60fps),并检查 IsVisible 暂停
+        // 窗口最小化/隐藏时跳过 Update,减少后台 CPU 占用
+        private readonly DispatcherTimer _animTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
 
         public MainWindow()
         {
@@ -54,6 +69,17 @@ namespace MemoryBlackHole.Views
                 DoSearch();
             };
 
+            // v3.0.9: 黑洞动画 DispatcherTimer + IsVisible 检查
+            _animTimer.Tick += (_, _) =>
+            {
+                if (!IsVisible || WindowState == WindowState.Minimized) return;
+                var now = DateTime.UtcNow;
+                double delta = Math.Clamp((now - _lastFrame).TotalSeconds, 0, 0.05);
+                _lastFrame = now;
+                _frontSpace.Update(delta);
+                _backSpace.Update(delta);
+            };
+
             Loaded += (_, _) =>
             {
                 // 从程序集自动读取版本号
@@ -61,23 +87,38 @@ namespace MemoryBlackHole.Views
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
                 // 默认加载全部记忆(进入探索页即看到列表)
+                UpdateSearchScope();
                 DoSearch();
-                CompositionTarget.Rendering += OnRendering;
+                // v3.0.9: 启动时初始化侧栏(标签列表+统计),后续只在 Add/Delete 触发
+                RefreshSidebar();
+                // v3.0.9: 启动黑洞动画 DispatcherTimer
+                _animTimer.Start();
                 // 注意:不再自定义 PreviewMouseWheel,WPF ScrollViewer 的默认滚轮方向
                 // (滚轮上=内容上、滚轮下=内容下)即与 Windows 文件管理器一致。
                 // 之前手动 `-e.Delta` 在某些嵌套/触摸板下会反向。
             };
             Closed += (_, _) =>
             {
-                CompositionTarget.Rendering -= OnRendering;
+                // v3.0.9: 停止黑洞动画 + 搜索防抖 timer,避免 Tick 在窗口关闭后访问已释放 UI
+                _animTimer.Stop();
+                _searchDebouncer.Stop();
             };
         }
 
         private void WindowFrame_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (WindowFrame.ActualWidth > 0 && WindowFrame.ActualHeight > 0)
-                WindowFrame.Clip = new RectangleGeometry(
-                    new Rect(0, 0, WindowFrame.ActualWidth, WindowFrame.ActualHeight), 18, 18);
+            double w = WindowFrame.ActualWidth, h = WindowFrame.ActualHeight;
+            if (w <= 0 || h <= 0) return;
+            // v3.0.9: 复用缓存的 RectangleGeometry,只改 Rect,避免每次 resize new 对象触发 GC
+            if (_windowFrameClip == null)
+            {
+                _windowFrameClip = new RectangleGeometry(new Rect(0, 0, w, h), 18, 18);
+                WindowFrame.Clip = _windowFrameClip;
+            }
+            else
+            {
+                _windowFrameClip.Rect = new Rect(0, 0, w, h);
+            }
         }
 
         /// <summary>全局键盘快捷键。</summary>
@@ -115,15 +156,7 @@ namespace MemoryBlackHole.Views
             }
         }
 
-        private void OnRendering(object? sender, EventArgs e)
-        {
-            var now = DateTime.UtcNow;
-            double delta = Math.Clamp((now - _lastFrame).TotalSeconds, 0, 0.05);
-            _lastFrame = now;
-            _frontSpace.Update(delta);
-            _backSpace.Update(delta);
-        }
-
+        // v3.0.9: OnRendering 改用 _animTimer DispatcherTimer(见构造函数),方法删除
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2)
@@ -165,6 +198,30 @@ namespace MemoryBlackHole.Views
         }
 
         /// <summary>拖拽文件到窗口 → 弹出新增对话框预填文件。</summary>
+        /// <summary>添加文件(非文本/链接):v3.0.9 查重 + 询问 + 实际 AddFile</summary>
+        private void AddFileWithDupCheck(MemoryItem item, string sourcePath)
+        {
+            // 查重:同 OriginalFileName + FileSizeBytes + IsDeleted=0
+            var dup = _service?.FindDuplicate(item.OriginalFileName, item.FileSizeBytes);
+            if (dup != null)
+            {
+                bool stillAdd = ConfirmDialog.ShowConfirm("记忆可能重复",
+                    $"已存在同名同大小文件:\n「{dup.OriginalFileName}」({FormatBytes(item.FileSizeBytes)})\n\n是否仍要添加?",
+                    this, isWarning: false);
+                if (!stillAdd) return;
+            }
+            _service?.AddFile(item, sourcePath);
+        }
+
+        /// <summary>v3.0.9: 字节数 → 友好字符串(B/KB/MB/GB)。</summary>
+        private static string FormatBytes(long bytes)
+        {
+            string[] units = { "B", "KB", "MB", "GB" };
+            double value = bytes; int unit = 0;
+            while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
+            return $"{value:0.##} {units[unit]}";
+        }
+
         private void Window_Drop(object sender, DragEventArgs e)
         {
             if (_service == null) return;
@@ -172,34 +229,46 @@ namespace MemoryBlackHole.Views
             var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
             if (files == null || files.Length == 0) return;
 
-            // 拖入文本：按文字内容处理；拖入文件：弹出预填对话框
-            if (files.Length == 1 && string.IsNullOrEmpty(System.IO.Path.GetExtension(files[0])))
+            // v3.0.9: 整个拖入流程 try-catch(剪贴板/权限异常/对话框异常统一拦截)
+            try
             {
-                // 无扩展名视为文本拖入，暂不支持
-                new NoticeDialog("拖入文件", "要添加文本记忆，请在正面点击✦按钮或使用 Ctrl+N。")
-                    { Owner = this }.ShowDialog();
-                return;
-            }
-
-            var dialog = new AddItemDialog(files) { Owner = this };
-            if (dialog.ShowDialog() != true) return;
-
-            for (int i = 0; i < dialog.FilePaths.Count; i++)
-            {
-                _service.AddFile(new MemoryItem
+                // 拖入文本：按文字内容处理；拖入文件：弹出预填对话框
+                if (files.Length == 1 && string.IsNullOrEmpty(System.IO.Path.GetExtension(files[0])))
                 {
-                    Type = dialog.SelectedType,
-                    Title = dialog.OriginalFileNames[i],
-                    Content = dialog.OriginalFileNames[i],
-                    Note = null,
-                    Tags = dialog.Tags,
-                    OriginalFileName = dialog.OriginalFileNames[i]
-                }, dialog.FilePaths[i]);
-            }
+                    // 无扩展名视为文本拖入，暂不支持
+                    new NoticeDialog("拖入文件", "要添加文本记忆，请在正面点击✦按钮或使用 Ctrl+N。")
+                        { Owner = this }.ShowDialog();
+                    return;
+                }
 
-            // 问题 2:新增记忆成功 → 黑洞光晕变蓝(5 秒后回默认)
-            _frontSpace.FlashBlue();
-            ScheduleSearch();
+                var dialog = new AddItemDialog(files) { Owner = this };
+                if (dialog.ShowDialog() != true) return;
+
+                for (int i = 0; i < dialog.FilePaths.Count; i++)
+                {
+                    AddFileWithDupCheck(new MemoryItem
+                    {
+                        Type = dialog.SelectedType,
+                        Title = dialog.OriginalFileNames[i],
+                        Content = dialog.OriginalFileNames[i],
+                        Note = null,
+                        Tags = dialog.Tags,
+                        OriginalFileName = dialog.OriginalFileNames[i]
+                    }, dialog.FilePaths[i]);
+                }
+
+                // 问题 2:新增记忆成功 → 黑洞光晕变蓝(5 秒后回默认)
+                _frontSpace.FlashBlue();
+                ScheduleSearch();
+                // v3.0.9: 新增记忆后刷新侧栏(标签计数/统计)
+                RefreshSidebar();
+            }
+            catch (Exception ex)
+            {
+                App.Log("Window_Drop 处理失败: " + ex);
+                new NoticeDialog("拖入文件失败", $"无法读取拖入的文件。\n{ex.Message}")
+                    { Owner = this }.ShowDialog();
+            }
         }
 
         private void FrontCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -310,7 +379,7 @@ namespace MemoryBlackHole.Views
                 // 非文本：流式写入 SQLite BLOB 或外部文件（避免 OOM）
                 for (int i = 0; i < dialog.FilePaths.Count; i++)
                 {
-                    _service.AddFile(new MemoryItem
+                    AddFileWithDupCheck(new MemoryItem
                     {
                         Type = dialog.SelectedType,
                         Title = dialog.OriginalFileNames[i],
@@ -325,6 +394,8 @@ namespace MemoryBlackHole.Views
             // 问题 2:新增记忆成功 → 黑洞光晕变蓝
             _frontSpace.FlashBlue();
             ScheduleSearch();
+            // v3.0.9: 新增记忆后刷新侧栏
+            RefreshSidebar();
         }
 
         private void ResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -341,6 +412,8 @@ namespace MemoryBlackHole.Views
                 {
                     _service?.Delete(item.Id);
                     ScheduleSearch();
+                    // v3.0.9: 删除记忆后刷新侧栏
+                    RefreshSidebar();
                 }
                 else if (preview.EditRequested)
                 {
@@ -364,14 +437,11 @@ namespace MemoryBlackHole.Views
         private void TagItem_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (sender is FrameworkElement fe && fe.DataContext is KeyValuePair<string, int> kv)
-                        {
-                            if (kv.Key == "全部标签")
-                                _activeTag = null;
-                            else
-                                _activeTag = kv.Key;
-                            SearchBox.Text = "";
-                            ScheduleSearch();
-                        }
+            {
+                _activeTag = kv.Key == "全部标签" ? null : kv.Key;
+                SearchBox.Text = "";
+                ScheduleSearch();
+            }
         }
 
         /// <summary>请求一次搜索(会被 300ms 防抖合并)。</summary>
@@ -384,7 +454,27 @@ namespace MemoryBlackHole.Views
         }
 
         /// <summary>真正执行搜索(防抖 Tick 后调用)。</summary>
-        private void DoSearch() => RefreshSearchResults();
+        private void DoSearch()
+        {
+            UpdateSearchScope();
+            RefreshSearchResults();
+        }
+
+        /// <summary>v3.0.8: 更新搜索范围提示(全局 / 标签:xxx)。使用预创建 brush 避免 GC 压力。</summary>
+        private void UpdateSearchScope()
+        {
+            if (SearchScopeText == null) return;
+            if (!string.IsNullOrEmpty(_activeTag))
+            {
+                SearchScopeText.Text = $"标签:{_activeTag}";
+                SearchScopeText.Foreground = _tagScopeBrush;
+            }
+            else
+            {
+                SearchScopeText.Text = "全局搜索";
+                SearchScopeText.Foreground = _globalScopeBrush;
+            }
+        }
 
         private void RefreshSearchResults()
         {
@@ -420,9 +510,7 @@ namespace MemoryBlackHole.Views
                     _backSpace.FlashRed();
                     ResultsList.Opacity = 0.60;
                 }
-
-                // 刷新标签侧栏
-                RefreshSidebar();
+                // v3.0.9: 搜索不再刷新侧栏(标签/统计);侧栏只在 Loaded/Add/Delete 时刷
             }
             catch (Exception ex)
             {
@@ -461,15 +549,13 @@ namespace MemoryBlackHole.Views
         }
 
         /// <summary>
-        /// 2.5D 风格化黑洞:引力透镜式椭圆吸积盘 + 光子球 + 双极喷流 + 池化粒子。
-        /// 视觉由 4 层独立旋转的椭圆环(冷热渐变描边)、事件视界暗球、辉光、双极喷流、
-        /// 以及绕轨道运行的彩色粒子组成。
+        /// 2.5D 风格化黑洞:单层暖色柔光环 + 3D 立体事件视界 + 表面高光自转 + 池化粒子。
+        /// 视觉由 halo 径向渐变 + 事件视界 RadialGradientBrush(偏左上略亮) + 表面高光斑点 60s/圈旋转 + 100 颗对数螺线向心粒子组成。
         ///
         /// 性能策略:
         /// - 所有 Brush / Pen / Gradient 在 Build() 阶段 Freeze(),跨线程共享且无 per-frame 分配。
-        /// - 80 颗粒子预分配在池中(对象复用),Update() 只改 Canvas 位置与 Opacity,不创建对象。
-        /// - 不使用额外的 CompositionTarget hook;由 MainWindow 统一驱动 OnRendering → Update(delta)。
-        /// - 喷发特效"借用"池中已 dead 节点,粒子死亡后回到池,GC 压力为零。
+        /// - 100 颗粒子预分配在池中(对象复用),Update() 只改 Canvas 位置与 Opacity,不创建对象。
+        /// - 由 MainWindow 的 DispatcherTimer(16ms)+ IsVisible 检查驱动 Update(delta),最小化时自动暂停。
         /// </summary>
         private sealed class SpaceCore
         {
@@ -486,9 +572,6 @@ namespace MemoryBlackHole.Views
             // 中心光晕(可被 Flash 临时染色)
             private const double HaloW     = 460 * SizeScale;
             private const double HaloH     = 460 * SizeScale;
-            // 光子球(锐利细亮环)
-            private const double PhotonW   = 220 * SizeScale;
-            private const double PhotonH   = 220 * SizeScale;
             // 单层柔光吸积盘(无旋转)
             private const double DiskW     = 600 * SizeScale;
             private const double DiskH     = 600 * SizeScale;
@@ -514,7 +597,8 @@ namespace MemoryBlackHole.Views
             private RadialGradientBrush _haloBrush = null!;  // 不 freeze,运行时改色
             private Ellipse _disk = null!;
             private Ellipse _eventHorizon = null!;
-            private Ellipse _photonRing = null!;
+            // v3.0.8: 视界表面旋转高光斑点(模拟球体自转,绕中心慢转)
+            private Ellipse _eventHighlight = null!;
 
             // Halo 默认色(暖/冷)与 flash 目标色(v3.0.6:颜色加深加亮,提高饱和度+alpha)
             private readonly Color _haloDefault;
@@ -577,27 +661,62 @@ namespace MemoryBlackHole.Views
                 };
                 _canvas.Children.Add(_halo);
 
-                // 3) 事件视界 — 纯黑实心
+                // 3) 事件视界 — v3.0.8 改 3D 立体:
+                //   主体仍是纯黑,但 RadialGradientBrush 让中心稍偏一侧(左/上)略亮(R=8 alpha=160),
+                //   对侧(右/下)更黑(R=0 alpha=255),模拟弯曲光的明暗,视觉上是球
                 _eventHorizon = new Ellipse
                 {
                     Width = EventW, Height = EventH,
                     IsHitTestVisible = false,
-                    Fill = Freeze(new SolidColorBrush(Color.FromRgb(0, 0, 0))),
+                    RenderTransformOrigin = new Point(0.5, 0.5),
+                    Fill = new RadialGradientBrush
+                    {
+                        Center = new Point(0.38, 0.34),   // 偏左上
+                        GradientStops = FreezeStops(new (Color, double)[]
+                        {
+                            (Color.FromArgb(170, 0x08, 0x08, 0x10), 0.00),  // 中心:深灰微亮
+                            (Color.FromArgb(255, 0x00, 0x00, 0x00), 0.55),  // 中段:纯黑
+                            (Color.FromArgb(255, 0x00, 0x00, 0x00), 1.00),  // 边缘:纯黑
+                        })
+                    },
                 };
+                // 视界投影(向下方 8px,模拟球落到光晕上的影子)
+                var eventShadow = new Ellipse
+                {
+                    Width = EventW, Height = EventH,
+                    IsHitTestVisible = false,
+                    Opacity = 0.55,
+                    Fill = Freeze(new SolidColorBrush(Color.FromRgb(0, 0, 0))),
+                    Effect = new BlurEffect { Radius = 18, KernelType = KernelType.Gaussian },
+                };
+                _canvas.Children.Add(eventShadow);
                 _canvas.Children.Add(_eventHorizon);
 
-                // 4) 光子球 — 锐利细亮环
-                _photonRing = new Ellipse
+                // 4) v3.0.8: 视界表面旋转高光斑点(模拟球体自转)
+                //   小亮斑 Ellipse,渐变填充(中心稍亮→边缘透明),
+                //   绕中心以 60 秒/圈 慢转,看着像球在自转
+                _eventHighlight = new Ellipse
                 {
-                    Width = PhotonW, Height = PhotonH,
-                    Stroke = Freeze(new SolidColorBrush(
-                        _warm ? Color.FromArgb(220, 0xFF, 0xC8, 0x78)
-                              : Color.FromArgb(220, 0xB0, 0xE0, 0xFF))),
-                    StrokeThickness = 2.0 * SizeScale,
+                    Width = 38 * SizeScale,
+                    Height = 38 * SizeScale,
                     IsHitTestVisible = false,
-                    Opacity = 0.78,
+                    Opacity = 0.55,
+                    RenderTransformOrigin = new Point(0.5, 0.5),
+                    Fill = new RadialGradientBrush
+                    {
+                        Center = new Point(0.5, 0.5),
+                        GradientStops = FreezeStops(new (Color, double)[]
+                        {
+                            (Color.FromArgb(180, 0x30, 0x30, 0x38), 0.00),
+                            (Color.FromArgb(120, 0x18, 0x18, 0x20), 0.55),
+                            (Color.FromArgb(0,   0,    0,    0),    1.00),
+                        })
+                    },
                 };
-                _canvas.Children.Add(_photonRing);
+                _eventHighlight.RenderTransform = new RotateTransform(0);
+                _canvas.Children.Add(_eventHighlight);
+
+                // (v3.0.8 移除 _photonRing:用户要"去掉黑洞边缘那圈比较亮的环",光晕(halo)保留不变)
 
                 // 5) 100 颗稳定吸积粒子 — 正圆轨道,启动随机分布
                 // 关键改动(问题 1):
@@ -717,11 +836,14 @@ namespace MemoryBlackHole.Views
                 LayoutCentered(_halo, cx, cy, 1.0);
                 _halo.Opacity = 0.55;
 
-                // 3) 事件视界 + 光子球(居中)
-                LayoutCentered(_photonRing,   cx, cy, 1.0);
+                // 3) 事件视界(居中)+ 表面高光斑点慢速旋转(60 秒/圈)
                 LayoutCentered(_eventHorizon, cx, cy, 1.0);
-                _photonRing.Opacity   = 0.78;
                 _eventHorizon.Opacity = 1.0;
+                LayoutCentered(_eventHighlight, cx, cy, 1.0);
+                // 高光绕中心旋转(_time 单调递增,Angle 0~360 循环)
+                // 60 秒一圈 = 0.10 rad/s = (360/60) 度/秒
+                double spinAngle = (_time * 6.0) % 360.0;   // 6 度/秒 → 60 秒/圈
+                ((RotateTransform)_eventHighlight.RenderTransform!).Angle = spinAngle;
 
                 // 4) 100 颗稳定吸积粒子 — 正圆 + 引力向心
                 // 关键(问题 1):x/y 半径相同 — 不再 ×0.52 压扁
@@ -735,7 +857,8 @@ namespace MemoryBlackHole.Views
                     // 达视界外缘 → 从外圈随机半径重生
                     if (_orbitRadius[i] <= OrbitRInner)
                     {
-                        _orbitRadius[i] = OrbitRInner + (_warm ? 0.5 : 0.5) +
+                        // v3.0.9: 死代码 `_warm ? 0.5 : 0.5` 简化为常量 0.5
+                        _orbitRadius[i] = OrbitRInner + 0.5 +
                             (OrbitROuter - OrbitRInner) * (0.5 + ((i * 37) % 50) / 50.0);
                         _orbitAngle[i]  += (i % 5) * 0.15;
                     }

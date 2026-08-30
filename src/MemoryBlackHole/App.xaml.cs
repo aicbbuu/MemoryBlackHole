@@ -26,15 +26,30 @@ namespace MemoryBlackHole
             DispatcherUnhandledException += (_, args) =>
             {
                 Log("DispatcherUnhandledException: " + args.Exception);
-                MessageBox.Show("程序发生错误：\n" + args.Exception.ToString(),
-                    "记忆黑洞", MessageBoxButton.OK, MessageBoxImage.Error);
+                // v3.0.9: try-catch MessageBox.Show,极端情况下(MessageBox 自身抛)只 Log 不弹,防死循环
+                try
+                {
+                    MessageBox.Show("程序发生错误：\n" + args.Exception.ToString(),
+                        "记忆黑洞", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch (Exception mbEx)
+                {
+                    Log("MessageBox.Show 失败: " + mbEx);
+                }
                 // 不设为 Handled，让程序继续（窗口若已创建则保留，避免静默消失）
             };
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             {
                 Log("AppDomain.UnhandledException: " + args.ExceptionObject);
-                MessageBox.Show("程序发生严重错误：\n" + args.ExceptionObject,
-                    "记忆黑洞", MessageBoxButton.OK, MessageBoxImage.Error);
+                try
+                {
+                    MessageBox.Show("程序发生严重错误：\n" + args.ExceptionObject,
+                        "记忆黑洞", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch (Exception mbEx)
+                {
+                    Log("MessageBox.Show 失败: " + mbEx);
+                }
             };
 
             try

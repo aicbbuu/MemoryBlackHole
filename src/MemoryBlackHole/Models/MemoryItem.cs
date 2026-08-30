@@ -46,7 +46,14 @@ namespace MemoryBlackHole.Models
         /// <summary>删除时间</summary>
         public DateTime? DeletedAt { get; set; }
 
-        /// <summary>缩略图源（从 FileData BLOB 加载，仅 Image 类型使用）。</summary>
+        /// <summary>
+        /// 缩略图源(从 FileData BLOB 加载,仅 Image 类型使用)。
+        /// v3.0.9 标 [Obsolete]:Search 永远 FileData=null,此 getter 永远返回 null,
+        /// MainWindow 列表行 ThumbnailImageVisibility 也永远 Collapsed,缩略图功能实际未生效。
+        /// 保留是为了不破坏 XAML 绑定(编译期 0 警告)。如未来要重新启用,见
+        /// PreviewMemoryDialog.xaml.cs 的 ExtractBlobToFile 流式加载方案。
+        /// </summary>
+        [System.Obsolete("ThumbnailSource 在搜索结果中永远为 null(MainWindow.xaml L142 绑定仍无害)。如要启用,改用 DataService.ExtractBlobToFile 流式加载缩略图。")]
         [System.Text.Json.Serialization.JsonIgnore]
         public System.Windows.Media.ImageSource? ThumbnailSource
         {
@@ -69,12 +76,18 @@ namespace MemoryBlackHole.Models
             }
         }
 
-        /// <summary>缩略图图标可见性。</summary>
+        /// <summary>
+        /// 缩略图图标可见性。v3.0.9 标 [Obsolete]:与 ThumbnailSource 联动,搜索结果中永远 Collapsed。
+        /// </summary>
+        [System.Obsolete("见 ThumbnailSource 注释。")]
         [System.Text.Json.Serialization.JsonIgnore]
         public System.Windows.Visibility ThumbnailVisibility =>
             Type == "Image" && ThumbnailSource != null ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
 
-        /// <summary>缩略图图片可见性。</summary>
+        /// <summary>
+        /// 缩略图图片可见性。v3.0.9 标 [Obsolete]:与 ThumbnailSource 联动,搜索结果中永远 Collapsed。
+        /// </summary>
+        [System.Obsolete("见 ThumbnailSource 注释。")]
         [System.Text.Json.Serialization.JsonIgnore]
         public System.Windows.Visibility ThumbnailImageVisibility =>
             Type == "Image" && ThumbnailSource != null ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;

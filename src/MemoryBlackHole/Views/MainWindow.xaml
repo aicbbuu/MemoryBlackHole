@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
-        Title="记忆黑洞" Width="1000" Height="600" MinWidth="360" MinHeight="280"
+        Title="记忆黑洞" Width="800" Height="540" MinWidth="360" MinHeight="280"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
         AllowDrop="True" Drop="Window_Drop"
@@ -290,8 +290,17 @@
                                        VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
+                    <!-- v3.0.8: 搜索范围提示(全局 / 标签:xxx)醒目色块,让用户知道当前搜的是哪 -->
+                    <Border x:Name="SearchScopeBar" Margin="0,8,0,0" Padding="10,6"
+                            CornerRadius="6" Background="#252B3F" HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="搜索范围:" FontSize="11" Foreground="#8991A8" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="SearchScopeText" Text="全局搜索" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#9D8BFF" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                     <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
-                               Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
+                               Foreground="#626D87" HorizontalAlignment="Center" Margin="0,10,0,10"/>
                     <ScrollViewer x:Name="ResultsScrollViewer" MaxHeight="360" VerticalScrollBarVisibility="Auto"
                                   CanContentScroll="True">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"

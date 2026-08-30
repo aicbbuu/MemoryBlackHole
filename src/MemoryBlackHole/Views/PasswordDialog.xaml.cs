@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 
 namespace MemoryBlackHole.Views
 {
@@ -18,6 +19,8 @@ namespace MemoryBlackHole.Views
                 ConfirmLabel.Visibility = Visibility.Visible;
                 ConfirmBox.Visibility = Visibility.Visible;
                 OkButton.Content = "保存密码";
+                // v3.0.9: 设置模式也自动 focus 密码框 + 支持回车提交
+                Loaded += (_, _) => PasswordBox.Focus();
             }
             else
             {
@@ -26,9 +29,10 @@ namespace MemoryBlackHole.Views
                 OkButton.Content = "验证";
                 Loaded += (_, _) => PasswordBox.Focus();
             }
+            // v3.0.9: Enter 键提交(任意模式)
+            PasswordBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) Ok_Click(this, new RoutedEventArgs()); };
+            ConfirmBox.KeyDown  += (_, e) => { if (e.Key == Key.Enter) Ok_Click(this, new RoutedEventArgs()); };
         }
-
-        private void PasswordBox_Changed(object sender, RoutedEventArgs e) { }
 
         private void Ok_Click(object sender, RoutedEventArgs e)
         {

@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace MemoryBlackHole.Views
 {
@@ -32,11 +34,28 @@ namespace MemoryBlackHole.Views
 
             if (isWarning)
             {
-                ConfirmButton.Background = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(0x8B, 0x1A, 0x1A));
-                ConfirmButton.Foreground = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(0xFF, 0x7E, 0x9E));
+                var bg = new SolidColorBrush(Color.FromRgb(0x8B, 0x1A, 0x1A));
+                var fg = new SolidColorBrush(Color.FromRgb(0xFF, 0x7E, 0x9E));
+                if (bg.CanFreeze) bg.Freeze();
+                if (fg.CanFreeze) fg.Freeze();
+                ConfirmButton.Background = bg;
+                ConfirmButton.Foreground = fg;
             }
+
+            // v3.0.9: Enter 确认 / Esc 取消
+            PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter && ConfirmButton.Visibility == Visibility.Visible)
+                {
+                    Confirm_Click(this, new RoutedEventArgs());
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    Cancel_Click(this, new RoutedEventArgs());
+                    e.Handled = true;
+                }
+            };
         }
 
         /// <summary>创建信息提示对话框（只有一个"知道了"按钮）。</summary>

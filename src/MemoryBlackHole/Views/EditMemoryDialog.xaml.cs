@@ -19,7 +19,8 @@ namespace MemoryBlackHole.Views
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            if (_item.Type == "Text")
+            // v3.0.9: Text/Link 都允许编辑 Content;非文本类型只改 Tags(Content 是文件名,不可改)
+            if (_item.Type == "Text" || _item.Type == "Link")
                 _item.Content = string.IsNullOrWhiteSpace(ContentBox.Text) ? null : ContentBox.Text.Trim();
             _item.Tags = string.IsNullOrWhiteSpace(TagsBox.Text) ? null : TagsBox.Text.Trim();
             DialogResult = true;
