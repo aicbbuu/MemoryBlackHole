@@ -292,9 +292,20 @@
                     </Border>
                     <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
                                Foreground="#626D87" HorizontalAlignment="Center" Margin="0,14,0,14"/>
-                    <ScrollViewer x:Name="ResultsScrollViewer" MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer x:Name="ResultsScrollViewer" MaxHeight="360" VerticalScrollBarVisibility="Auto"
+                                  CanContentScroll="True">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
-                                      Opacity="0.60" MouseDoubleClick="ResultsList_MouseDoubleClick"/>
+                                      Opacity="0.60" MouseDoubleClick="ResultsList_MouseDoubleClick"
+                                      ScrollViewer.CanContentScroll="True"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
                     </ScrollViewer>
                 </StackPanel>
             </Grid>

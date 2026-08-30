@@ -39,6 +39,10 @@ namespace MemoryBlackHole.Services
         private readonly string _connectionString;
         private readonly string _fileStoreDir;
         private readonly long _largeFileThreshold;
+        // v3.0.7: Search 专用长连接(单例),避免每次 Search 都冷启新连接 + 7 个 PRAGMA
+        // 写操作(AddFile/Update/Delete)仍用 using 短连接,保证写并发安全
+        private SqliteConnection? _searchConn;
+        private readonly object _searchConnLock = new();
 
         /// <summary>
         /// 创建本地存储服务。默认文件大小阈值为 1GiB；可传入较小阈值用于自动化测试。
@@ -168,7 +172,9 @@ namespace MemoryBlackHole.Services
                 cmd.CommandText = @"
                     CREATE INDEX IF NOT EXISTS IX_Items_Type ON Items(Type);
                     CREATE INDEX IF NOT EXISTS IX_Items_CreatedAt ON Items(CreatedAt);
-                    CREATE INDEX IF NOT EXISTS IX_Items_Favorite ON Items(IsFavorite);";
+                    CREATE INDEX IF NOT EXISTS IX_Items_Favorite ON Items(IsFavorite);
+                -- v3.0.7: 配合 Search 的非文本类过滤(Type 走索引已够)
+                CREATE INDEX IF NOT EXISTS IX_Items_OriginalFileName ON Items(OriginalFileName);";
                 cmd.ExecuteNonQuery();
             }
 
@@ -355,61 +361,62 @@ namespace MemoryBlackHole.Services
             cmd.Parameters.AddWithValue("$fav", item.IsFavorite ? 1 : 0);
         }
 
-        /// <summary>按关键词全文搜索。中文/CJK 用 LIKE 模糊匹配（字节级 100% 可靠）；
-        /// 纯英文/数字用 FTS5 前缀匹配；无关键词按条件列出。
-        /// 支持按标签过滤（逗号分隔，不区分大小写）。</summary>
+        /// <summary>按关键词全文搜索。
+        /// v3.0.7 改造:
+        ///   - 走专用长连接(_searchConn)避免每次冷启新连接 + 7 PRAGMA
+        ///   - 所有关键词(含 CJK)统一走 FTS5(ItemsFts 用 unicode61 分词器,CJK 逐字 AND)
+        ///     不再走 LIKE 全表扫(几万条数据时 LIKE 慢 100~500ms,FTS5 几 ms)
+        ///   - 标签过滤先用 SQL 的 Tags GLOB '*tag*' 在数据库端粗筛,内存只做精确切分
+        ///   - 非文本类(Type=Image/Audio/Video/File)只搜 Title + OriginalFileName + Tags,
+        ///     Content 字段对这些类型是文件名(重复)或 URL,搜了无意义还拖慢 FTS5
+        /// 支持按 type/favorite/tag 过滤。
+        /// </summary>
         public List<MemoryItem> Search(string keyword, string? type = null, bool? favorite = null, string? tag = null)
         {
             var result = new List<MemoryItem>();
-            using var conn = new SqliteConnection(_connectionString);
-            OpenAndConfigure(conn);
-
-            string sql;
+            var conn = GetOrOpenSearchConn();
             using var cmd = conn.CreateCommand();
 
-            if (string.IsNullOrWhiteSpace(keyword))
+            // 构造 type/keyword 过滤
+            bool hasKeyword = !string.IsNullOrWhiteSpace(keyword);
+            string? trimmedKeyword = hasKeyword ? keyword!.Trim() : null;
+
+            // 非文本类:Type != Text/Link 时,只搜 Title + OriginalFileName + Tags(跳过 Content)
+            // Text/Link:搜 Title + Content + Note + Tags
+            bool onlyFileName = !string.IsNullOrEmpty(type) && type != "Text" && type != "Link";
+
+            if (!hasKeyword)
             {
-                // 无关键词：按条件列出
-                sql = "SELECT * FROM Items WHERE 1=1";
+                // 无关键词:按条件列出(走 Type/CreatedAt 索引)
+                string sql = "SELECT * FROM Items WHERE 1=1";
                 if (!string.IsNullOrEmpty(type)) sql += " AND Type=$type";
                 if (favorite == true) sql += " AND IsFavorite=1";
+                if (!string.IsNullOrEmpty(tag)) sql += " AND Tags GLOB $tagG";
                 sql += " ORDER BY CreatedAt DESC LIMIT 200";
                 cmd.CommandText = sql;
                 if (!string.IsNullOrEmpty(type)) cmd.Parameters.AddWithValue("$type", type);
-            }
-            else if (ContainsCJK(keyword))
-            {
-                // 含中文/CJK：LIKE 模糊匹配 — 字节级，100% 可靠
-                // 每个空格分隔的 term 逐词 AND，如"会议记录" → LIKE '%会议记录%'
-                var terms = keyword.Split(new[] { ' ', '\u3000' }, StringSplitOptions.RemoveEmptyEntries);
-                var likeClauses = new List<string>();
-                int paramIdx = 0;
-                foreach (var t in terms)
-                {
-                    string p = $"$kw{paramIdx}";
-                    likeClauses.Add($"(i.Title LIKE {p} OR i.Content LIKE {p} OR i.Note LIKE {p} OR i.Tags LIKE {p})");
-                    cmd.Parameters.AddWithValue(p, $"%{t}%");
-                    paramIdx++;
-                }
-                sql = $"SELECT DISTINCT i.* FROM Items i WHERE {string.Join(" AND ", likeClauses)}";
-                if (!string.IsNullOrEmpty(type)) sql += " AND i.Type=$type";
-                if (favorite == true) sql += " AND i.IsFavorite=1";
-                sql += " ORDER BY i.CreatedAt DESC LIMIT 200";
-                cmd.CommandText = sql;
-                if (!string.IsNullOrEmpty(type)) cmd.Parameters.AddWithValue("$type", type);
+                if (!string.IsNullOrEmpty(tag)) cmd.Parameters.AddWithValue("$tagG", "*" + EscapeGlob(tag!) + "*");
             }
             else
             {
-                // 纯英文/数字：FTS5 前缀匹配（高效）
-                sql = @"SELECT i.* FROM ItemsFts f
-                        JOIN Items i ON i.Id = f.Rowid
-                        WHERE ItemsFts MATCH $kw";
+                // 有关键词:全部走 FTS5(unicode61 对 CJK 逐字分词,英文/数字按词)
+                string sql = onlyFileName
+                    ? @"SELECT i.* FROM ItemsFts f
+                            JOIN Items i ON i.Id = f.Rowid
+                            WHERE ItemsFts MATCH $kw
+                              AND (i.Title MATCH $kw OR i.OriginalFileName MATCH $kw OR i.Tags MATCH $kw)"
+                    : @"SELECT i.* FROM ItemsFts f
+                            JOIN Items i ON i.Id = f.Rowid
+                            WHERE ItemsFts MATCH $kw";
                 if (!string.IsNullOrEmpty(type)) sql += " AND i.Type=$type";
                 if (favorite == true) sql += " AND i.IsFavorite=1";
+                if (!string.IsNullOrEmpty(tag)) sql += " AND i.Tags GLOB $tagG";
+                // 排序:bm25 相关性优先,CreatedAt 次之
                 sql += " ORDER BY bm25(ItemsFts), i.CreatedAt DESC LIMIT 200";
                 cmd.CommandText = sql;
-                cmd.Parameters.AddWithValue("$kw", BuildMatchQuery(keyword));
+                cmd.Parameters.AddWithValue("$kw", BuildMatchQuery(trimmedKeyword!));
                 if (!string.IsNullOrEmpty(type)) cmd.Parameters.AddWithValue("$type", type);
+                if (!string.IsNullOrEmpty(tag)) cmd.Parameters.AddWithValue("$tagG", "*" + EscapeGlob(tag!) + "*");
             }
 
             using var rd = cmd.ExecuteReader();
@@ -433,13 +440,14 @@ namespace MemoryBlackHole.Services
                 });
             }
 
-            // 按标签过滤（内存过滤，标签是逗号分隔文本）
+            // 标签精确匹配(内存中切分 Tags 文本,SQL GLOB 已粗筛过)
+            // SQL 的 Tags GLOB '*tag*' 已剔除不含该子串的行;这里只做精确化(逗号分隔的某个 tag 完整等于)
             if (!string.IsNullOrEmpty(tag) && result.Count > 0)
             {
-                var tagLower = tag.Trim().ToLowerInvariant();
+                var tagLower = tag!.Trim().ToLowerInvariant();
                 result = result.Where(item =>
                     !string.IsNullOrEmpty(item.Tags) &&
-                    item.Tags.Split(new[] { ',', '，' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    item.Tags!.Split(new[] { ',', '，' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                         .Any(t => t.ToLowerInvariant() == tagLower)
                 ).ToList();
             }
@@ -447,35 +455,50 @@ namespace MemoryBlackHole.Services
             return result;
         }
 
+        /// <summary>取/打开 Search 专用长连接(线程安全单例)。</summary>
+        private SqliteConnection GetOrOpenSearchConn()
+        {
+            lock (_searchConnLock)
+            {
+                if (_searchConn == null)
+                {
+                    _searchConn = new SqliteConnection(_connectionString);
+                    OpenAndConfigure(_searchConn);
+                }
+                else if (_searchConn.State != System.Data.ConnectionState.Open)
+                {
+                    OpenAndConfigure(_searchConn);
+                }
+                return _searchConn;
+            }
+        }
+
+        /// <summary>GLOB 模式特殊字符转义(* ? [ ] \)。</summary>
+        private static string EscapeGlob(string s)
+        {
+            return s.Replace("\\", "\\\\")
+                    .Replace("*", "\\*")
+                    .Replace("?", "\\?")
+                    .Replace("[", "\\[")
+                    .Replace("]", "\\]");
+        }
+
         /// <summary>把英文/数字关键词转成 FTS5 前缀匹配表达式（空格分词，逐词 AND+前缀）。</summary>
-                private static string BuildMatchQuery(string keyword)
-                {
-                    var terms = keyword.Split(new[] { ' ', '\u3000' }, StringSplitOptions.RemoveEmptyEntries);
-                    var parts = new List<string>();
-                    foreach (var t in terms)
-                    {
-                        var esc = t.Replace("\"", "\"\"");
-                        parts.Add($"\"{esc}\"*");
-                    }
-                    return string.Join(" AND ", parts);
-                }
+        private static string BuildMatchQuery(string keyword)
+        {
+            var terms = keyword.Split(new[] { ' ', '\u3000' }, StringSplitOptions.RemoveEmptyEntries);
+            var parts = new List<string>();
+            foreach (var t in terms)
+            {
+                var esc = t.Replace("\"", "\"\"");
+                parts.Add($"\"{esc}\"*");
+            }
+            return string.Join(" AND ", parts);
+        }
 
-                /// <summary>检查字符串是否包含 CJK 字符。</summary>
-                private static bool ContainsCJK(string text)
-                {
-                    foreach (char c in text)
-                        if (IsCJK(c)) return true;
-                    return false;
-                }
+        
 
-                /// <summary>判断字符是否为中日韩统一表意文字。</summary>
-                private static bool IsCJK(char c)
-                {
-                    return (c >= 0x4E00 && c <= 0x9FFF) ||
-                           (c >= 0x3400 && c <= 0x4DBF);
-                }
-
-                public bool HasPassword()
+        public bool HasPassword()
         {
             using var conn = new SqliteConnection(_connectionString);
             OpenAndConfigure(conn);
@@ -483,7 +506,7 @@ namespace MemoryBlackHole.Services
             cmd.CommandText = "SELECT COUNT(*) FROM Settings WHERE Key='password_hash'";
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
-
+    
         public void SetPassword(string password)
         {
             byte[] salt = RandomNumberGenerator.GetBytes(16);

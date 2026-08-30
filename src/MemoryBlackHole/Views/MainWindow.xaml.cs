@@ -26,6 +26,10 @@ namespace MemoryBlackHole.Views
         private DateTime _lastFrame;
         private string? _activeTag;
         private Color _accentColor = Color.FromRgb(0x6D, 0x5D, 0xF7);
+        // v3.0.7: 搜索防抖 — 连续输入 300ms 内只触发一次真实搜索
+        // (连续点标签 / 连续打字 / 快速按 Enter 都被合并,避免无谓的 DB 查询)
+        private readonly DispatcherTimer _searchDebouncer = new() { Interval = TimeSpan.FromMilliseconds(300) };
+        private bool _searchPending;
 
         public MainWindow()
         {
@@ -41,6 +45,14 @@ namespace MemoryBlackHole.Views
                 ConfirmDialog.ShowInfo("数据库初始化失败", "数据库初始化失败：" + ex.Message, this);
             }
 
+            // v3.0.7: 搜索防抖 — Tick 触发后才真正执行 RefreshSearchResults
+            _searchDebouncer.Tick += (_, _) =>
+            {
+                _searchDebouncer.Stop();
+                _searchPending = false;
+                DoSearch();
+            };
+
             Loaded += (_, _) =>
             {
                 // 从程序集自动读取版本号
@@ -48,16 +60,11 @@ namespace MemoryBlackHole.Views
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
                 // 默认加载全部记忆(进入探索页即看到列表)
-                RefreshSearchResults();
+                DoSearch();
                 CompositionTarget.Rendering += OnRendering;
-
-                // 反转探索页面滚动方向（匹配 Windows 标准行为）
-                ResultsScrollViewer.PreviewMouseWheel += (s, e) =>
-                {
-                    ResultsScrollViewer.ScrollToVerticalOffset(
-                        ResultsScrollViewer.VerticalOffset - e.Delta);
-                    e.Handled = true;
-                };
+                // 注意:不再自定义 PreviewMouseWheel,WPF ScrollViewer 的默认滚轮方向
+                // (滚轮上=内容上、滚轮下=内容下)即与 Windows 文件管理器一致。
+                // 之前手动 `-e.Delta` 在某些嵌套/触摸板下会反向。
             };
             Closed += (_, _) =>
             {
@@ -191,7 +198,7 @@ namespace MemoryBlackHole.Views
 
             // 问题 2:新增记忆成功 → 黑洞光晕变蓝(5 秒后回默认)
             _frontSpace.FlashBlue();
-            RefreshSearchResults();
+            ScheduleSearch();
         }
 
         private void FrontCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -316,7 +323,7 @@ namespace MemoryBlackHole.Views
 
             // 问题 2:新增记忆成功 → 黑洞光晕变蓝
             _frontSpace.FlashBlue();
-            RefreshSearchResults();
+            ScheduleSearch();
         }
 
         private void ResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -332,7 +339,7 @@ namespace MemoryBlackHole.Views
                 if (preview.DeleteRequested)
                 {
                     _service?.Delete(item.Id);
-                    RefreshSearchResults();
+                    ScheduleSearch();
                 }
                 else if (preview.EditRequested)
                 {
@@ -340,7 +347,7 @@ namespace MemoryBlackHole.Views
                     if (edit.ShowDialog() == true)
                     {
                         _service?.Update(item);
-                        RefreshSearchResults();
+                        ScheduleSearch();
                     }
                 }
             }
@@ -349,7 +356,7 @@ namespace MemoryBlackHole.Views
         private void SearchBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
-                RefreshSearchResults();
+                ScheduleSearch();
         }
 
         /// <summary>点击标签→按标签过滤搜索。</summary>
@@ -362,9 +369,21 @@ namespace MemoryBlackHole.Views
                             else
                                 _activeTag = kv.Key;
                             SearchBox.Text = "";
-                            RefreshSearchResults();
+                            ScheduleSearch();
                         }
         }
+
+        /// <summary>请求一次搜索(会被 300ms 防抖合并)。</summary>
+        private void ScheduleSearch()
+        {
+            if (_searchPending) return;
+            _searchPending = true;
+            _searchDebouncer.Stop();
+            _searchDebouncer.Start();
+        }
+
+        /// <summary>真正执行搜索(防抖 Tick 后调用)。</summary>
+        private void DoSearch() => RefreshSearchResults();
 
         private void RefreshSearchResults()
         {
@@ -480,11 +499,11 @@ namespace MemoryBlackHole.Views
             // 吸积粒子数量
             private const int OrbitPoolSize = 100;
 
-            // Halo 闪烁参数
+            // Halo 闪烁参数(v3.0.6):总时长 5s→10s,颜色加深加亮
             private const double FlashInSec  = 0.30;   // 进入动画 0.3s
-            private const double FlashHoldSec = 4.40;  // 保持 4.4s
+            private const double FlashHoldSec = 9.40;  // 保持 9.4s(v3.0.6:4.4→9.4)
             private const double FlashOutSec  = 0.30;   // 退出动画 0.3s
-            private const double FlashTotalSec = FlashInSec + FlashHoldSec + FlashOutSec; // 5.0s
+            private const double FlashTotalSec = FlashInSec + FlashHoldSec + FlashOutSec; // 10.0s
 
             private readonly Canvas _canvas;
             private readonly bool _warm;
@@ -496,10 +515,12 @@ namespace MemoryBlackHole.Views
             private Ellipse _eventHorizon = null!;
             private Ellipse _photonRing = null!;
 
-            // Halo 默认色(暖/冷)与 flash 目标色
+            // Halo 默认色(暖/冷)与 flash 目标色(v3.0.6:颜色加深加亮,提高饱和度+alpha)
             private readonly Color _haloDefault;
-            private readonly Color _haloBlue = Color.FromArgb(200, 0x40, 0x90, 0xFF);
-            private readonly Color _haloRed  = Color.FromArgb(200, 0xFF, 0x40, 0x50);
+            // 深亮蓝:R/G 压低、B 满,饱和度拉满;alpha 220 让中心更显眼
+            private readonly Color _haloBlue = Color.FromArgb(220, 0x10, 0x60, 0xFF);
+            // 深红:R 满、G/B 压低,饱和度拉满;alpha 220
+            private readonly Color _haloRed  = Color.FromArgb(220, 0xFF, 0x18, 0x30);
             // 当前闪烁状态
             private Color _haloTarget;
             private double _haloT;   // 已流逝秒
@@ -609,7 +630,7 @@ namespace MemoryBlackHole.Views
                 }
             }
 
-            /// <summary>新增记忆成功 — 光晕变蓝,5 秒后平滑回默认。</summary>
+            /// <summary>新增记忆成功 — 光晕变深亮蓝,10 秒后平滑回默认。</summary>
             public void FlashBlue()
             {
                 _haloTarget = _haloBlue;
@@ -617,7 +638,7 @@ namespace MemoryBlackHole.Views
                 _haloFlashing = true;
             }
 
-            /// <summary>搜索命中 — 光晕变红,5 秒后平滑回默认。</summary>
+            /// <summary>搜索命中 — 光晕变深红,10 秒后平滑回默认。</summary>
             public void FlashRed()
             {
                 _haloTarget = _haloRed;
@@ -657,7 +678,7 @@ namespace MemoryBlackHole.Views
                 LayoutCentered(_disk, cx, cy, breath);
                 _disk.Opacity = 0.30;
 
-                // 2) 中心光晕 — Halo 闪烁(平滑过渡,5 秒回默认)
+                // 2) 中心光晕 — Halo 闪烁(平滑过渡,v3.0.6 总时长 10 秒回默认)
                 if (_haloFlashing)
                 {
                     _haloT += delta;
