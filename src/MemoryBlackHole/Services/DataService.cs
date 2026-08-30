@@ -150,6 +150,12 @@ namespace MemoryBlackHole.Services
                 cmd.CommandText = "ALTER TABLE Items ADD COLUMN DeletedAt TEXT NULL;";
                 try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
             }
+            // v3.1.4: 缩略图列(仅 Image 类型,AddFile 时生成 100x100 PNG 存此)
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "ALTER TABLE Items ADD COLUMN Thumbnail BLOB NULL;";
+                try { cmd.ExecuteNonQuery(); } catch (SqliteException) { }
+            }
 
             // v1.0.1: FTS5 改用 unicode61 分词器，CJK 每字为独立 token，配合逐字 AND 查询精准匹配
             // v3.0.8: 加 prefix='1 2 3 4' 让 1~4 字符前缀都建索引,支持单字/单字母搜索
@@ -232,6 +238,7 @@ namespace MemoryBlackHole.Services
             cmd.Parameters.AddWithValue("$content", (object?)item.Content ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$file", (object?)item.FilePath ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$fdata", (object?)item.FileData ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$thumb", (object?)item.Thumbnail ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$ofn", (object?)item.OriginalFileName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$fsize", item.FileSizeBytes);
             cmd.Parameters.AddWithValue("$note", (object?)item.Note ?? DBNull.Value);
@@ -251,6 +258,13 @@ namespace MemoryBlackHole.Services
             var fileInfo = new FileInfo(sourcePath);
             item.FileSizeBytes = fileInfo.Length;
 
+            // v3.1.4: 仅 Image 类型在 AddFile 时生成 100x100 PNG 缩略图(小,KB 级)
+            if (item.Type == "Image")
+            {
+                try { item.Thumbnail = GenerateThumbnail(sourcePath, 100); }
+                catch { item.Thumbnail = null; /* 损坏图片容错,允许 Add 失败但缩略图失败 */ }
+            }
+
             if (fileInfo.Length <= _largeFileThreshold)
             {
                 AddBlobFile(item, sourcePath);
@@ -258,6 +272,49 @@ namespace MemoryBlackHole.Services
             }
 
             AddExternalFile(item, sourcePath);
+        }
+
+        /// <summary>
+        /// v3.1.4: 生成图片缩略图(默认 100x100,PNG 编码)。
+        /// 用 BitmapImage(StreamSource)+ RenderTargetBitmap 缩放,避免把大图全量加载到内存。
+        /// 失败返回 null(损坏图、格式不支持等),不抛异常。
+        /// </summary>
+        private static byte[]? GenerateThumbnail(string imagePath, int targetSize)
+        {
+            try
+            {
+                using var fs = File.OpenRead(imagePath);
+                var src = new System.Windows.Media.Imaging.BitmapImage();
+                src.BeginInit();
+                src.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                src.StreamSource = fs;
+                src.DecodePixelWidth = targetSize;
+                src.EndInit();
+                src.Freeze();
+
+                double scale = (double)targetSize / Math.Max(src.PixelWidth, src.PixelHeight);
+                int w = (int)Math.Round(src.PixelWidth * scale);
+                int h = (int)Math.Round(src.PixelHeight * scale);
+
+                var dv = new System.Windows.Media.DrawingVisual();
+                using (var dc = dv.RenderOpen())
+                {
+                    dc.DrawImage(src, new System.Windows.Rect(0, 0, w, h));
+                }
+                var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                    w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                rtb.Render(dv);
+
+                var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                using var ms = new MemoryStream();
+                enc.Save(ms);
+                return ms.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -281,13 +338,14 @@ namespace MemoryBlackHole.Services
                 {
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
-                        INSERT INTO Items(Type, Title, Content, FilePath, FileData,
+                        INSERT INTO Items(Type, Title, Content, FilePath, FileData, Thumbnail,
                                           OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                        VALUES ($type, $title, $content, NULL, zeroblob($blobSize),
+                        VALUES ($type, $title, $content, NULL, zeroblob($blobSize), $thumb,
                                 $ofn, $fsize, $note, $tags, $created, $fav);
                         SELECT last_insert_rowid();";
                     AddItemParameters(cmd, item);
                     cmd.Parameters.AddWithValue("$blobSize", item.FileSizeBytes);
+                    cmd.Parameters.AddWithValue("$thumb", (object?)item.Thumbnail ?? DBNull.Value);
                     item.Id = (long)cmd.ExecuteScalar()!;
                 }
 
@@ -341,14 +399,15 @@ namespace MemoryBlackHole.Services
                 using var conn = new SqliteConnection(_connectionString);
                 OpenAndConfigure(conn);
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = @"
-                    INSERT INTO Items(Type, Title, Content, FilePath, FileData,
-                                      OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
-                    VALUES ($type, $title, $content, $file, NULL,
-                            $ofn, $fsize, $note, $tags, $created, $fav);
-                    SELECT last_insert_rowid();";
+            cmd.CommandText = @"
+                INSERT INTO Items(Type, Title, Content, FilePath, FileData, Thumbnail,
+                                  OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite)
+                VALUES ($type, $title, $content, $file, $fdata, $thumb,
+                        $ofn, $fsize, $note, $tags, $created, $fav);
+                SELECT last_insert_rowid();";
                 AddItemParameters(cmd, item);
                 cmd.Parameters.AddWithValue("$file", destination);
+                cmd.Parameters.AddWithValue("$thumb", (object?)item.Thumbnail ?? DBNull.Value);
                 item.Id = (long)cmd.ExecuteScalar()!;
                 item.FilePath = destination;
                 item.FileData = null;
@@ -443,6 +502,8 @@ namespace MemoryBlackHole.Services
                     FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
                     // 搜索列表只加载元数据；文件 BLOB 在预览时按流提取，避免多条结果耗尽内存。
                     FileData = null,
+                    // v3.1.4: 缩略图 BLOB(小,KB 级)— 列表行显示
+                    Thumbnail = rd.IsDBNull(rd.GetOrdinal("Thumbnail")) ? null : (byte[]?)rd.GetValue(rd.GetOrdinal("Thumbnail")),
                     OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
                     FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
                     Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),
@@ -495,15 +556,35 @@ namespace MemoryBlackHole.Services
                     .Replace("]", "\\]");
         }
 
-        /// <summary>把英文/数字关键词转成 FTS5 前缀匹配表达式（空格分词，逐词 AND+前缀）。</summary>
+        /// <summary>
+        /// v3.1.4: 按字符类型分别构造 FTS5 MATCH 表达式:
+        ///   - 纯 ASCII 字母/数字 term → "\"term\"*"  (前缀匹配,让 prefix='1 2 3 4' 起作用,搜 "a" 命中 "apple")
+        ///   - 含 CJK 字符 term → "\"term\""  (精确匹配,unicode61 已按字分 token,单字精确匹配即可)
+        ///   - 多 term 用 AND 组合
+        /// </summary>
         private static string BuildMatchQuery(string keyword)
         {
             var terms = keyword.Split(new[] { ' ', '\u3000' }, StringSplitOptions.RemoveEmptyEntries);
-            var parts = new List<string>();
+            if (terms.Length == 0) return "";
+            var parts = new List<string>(terms.Length);
             foreach (var t in terms)
             {
                 var esc = t.Replace("\"", "\"\"");
-                parts.Add($"\"{esc}\"*");
+                // CJK 字符判定:基本汉字(0x4E00-0x9FFF) + 扩展 A/B(0x3400-0x4DBF)
+                //   + 假名(0x3040-0x30FF) + 韩文(0xAC00-0xD7AF)
+                bool hasCjk = false;
+                foreach (char c in t)
+                {
+                    if ((c >= '\u4E00' && c <= '\u9FFF') ||
+                        (c >= '\u3400' && c <= '\u4DBF') ||
+                        (c >= '\u3040' && c <= '\u30FF') ||
+                        (c >= '\uAC00' && c <= '\uD7AF'))
+                    {
+                        hasCjk = true;
+                        break;
+                    }
+                }
+                parts.Add(hasCjk ? $"\"{esc}\"" : $"\"{esc}\"*");
             }
             return string.Join(" AND ", parts);
         }
@@ -613,7 +694,7 @@ namespace MemoryBlackHole.Services
             using var conn = new SqliteConnection(_connectionString);
             OpenAndConfigure(conn);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"SELECT Id, Type, Title, Content, FilePath, FileData, OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite
+            cmd.CommandText = @"SELECT Id, Type, Title, Content, FilePath, FileData, Thumbnail, OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite
                                   FROM Items
                                   WHERE IsDeleted = 0 AND OriginalFileName = $name AND FileSizeBytes = $size
                                   ORDER BY CreatedAt DESC LIMIT 1";
@@ -629,6 +710,7 @@ namespace MemoryBlackHole.Services
                 Content = rd.IsDBNull(rd.GetOrdinal("Content")) ? null : rd.GetString(rd.GetOrdinal("Content")),
                 FilePath = rd.IsDBNull(rd.GetOrdinal("FilePath")) ? null : rd.GetString(rd.GetOrdinal("FilePath")),
                 FileData = null,
+                Thumbnail = rd.IsDBNull(rd.GetOrdinal("Thumbnail")) ? null : (byte[]?)rd.GetValue(rd.GetOrdinal("Thumbnail")),
                 OriginalFileName = rd.IsDBNull(rd.GetOrdinal("OriginalFileName")) ? null : rd.GetString(rd.GetOrdinal("OriginalFileName")),
                 FileSizeBytes = rd.GetInt64(rd.GetOrdinal("FileSizeBytes")),
                 Note = rd.IsDBNull(rd.GetOrdinal("Note")) ? null : rd.GetString(rd.GetOrdinal("Note")),

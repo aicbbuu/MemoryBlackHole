@@ -47,27 +47,29 @@ namespace MemoryBlackHole.Models
         public DateTime? DeletedAt { get; set; }
 
         /// <summary>
-        /// 缩略图源(从 FileData BLOB 加载,仅 Image 类型使用)。
-        /// v3.0.9 标 [Obsolete]:Search 永远 FileData=null,此 getter 永远返回 null,
-        /// MainWindow 列表行 ThumbnailImageVisibility 也永远 Collapsed,缩略图功能实际未生效。
-        /// 保留是为了不破坏 XAML 绑定(编译期 0 警告)。如未来要重新启用,见
-        /// PreviewMemoryDialog.xaml.cs 的 ExtractBlobToFile 流式加载方案。
+        /// v3.1.4: 缩略图 BLOB(约 100x100 PNG,KB 级,仅 Image 类型在 AddFile 时生成)。
+        /// Search 时 SELECT 此字段(小 BLOB 不耗内存),MainWindow 列表行优先显示此缩略图。
+        /// 旧数据(无缩略图)或非 Image 类型此字段为 null,列表回退显示占位 emoji(🖼)。
         /// </summary>
-        [System.Obsolete("ThumbnailSource 在搜索结果中永远为 null(MainWindow.xaml L142 绑定仍无害)。如要启用,改用 DataService.ExtractBlobToFile 流式加载缩略图。")]
+        public byte[]? Thumbnail { get; set; }
+
+        /// <summary>
+        /// 缩略图 ImageSource(懒加载:有 Thumbnail BLOB 才解码为 BitmapImage,缓存)。
+        /// 用 StreamSource + BitmapCacheOption.OnLoad 释放 native 内存。
+        /// </summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public System.Windows.Media.ImageSource? ThumbnailSource
+        public System.Windows.Media.ImageSource? ThumbnailImage
         {
             get
             {
-                if (Type != "Image" || FileData == null || FileData.Length == 0) return null;
+                if (Thumbnail == null || Thumbnail.Length == 0) return null;
                 try
                 {
                     var img = new System.Windows.Media.Imaging.BitmapImage();
-                    using var ms = new System.IO.MemoryStream(FileData);
+                    using var ms = new System.IO.MemoryStream(Thumbnail);
                     img.BeginInit();
                     img.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                     img.StreamSource = ms;
-                    img.DecodePixelWidth = 84;
                     img.EndInit();
                     img.Freeze();
                     return img;
@@ -76,21 +78,30 @@ namespace MemoryBlackHole.Models
             }
         }
 
-        /// <summary>
-        /// 缩略图图标可见性。v3.0.9 标 [Obsolete]:与 ThumbnailSource 联动,搜索结果中永远 Collapsed。
-        /// </summary>
-        [System.Obsolete("见 ThumbnailSource 注释。")]
+        /// <summary>缩略图占位图标可见性(无缩略图或非 Image 时显示)。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public System.Windows.Visibility ThumbnailVisibility =>
-            Type == "Image" && ThumbnailSource != null ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+        public System.Windows.Visibility ThumbnailIconVisibility
+        {
+            get
+            {
+                // v3.1.4: Thumbnail 非空且类型为 Image 时,占位图标隐藏(由缩略图替代)
+                return Type == "Image" && Thumbnail != null && Thumbnail.Length > 0
+                    ? System.Windows.Visibility.Collapsed
+                    : System.Windows.Visibility.Visible;
+            }
+        }
 
-        /// <summary>
-        /// 缩略图图片可见性。v3.0.9 标 [Obsolete]:与 ThumbnailSource 联动,搜索结果中永远 Collapsed。
-        /// </summary>
-        [System.Obsolete("见 ThumbnailSource 注释。")]
+        /// <summary>缩略图图片可见性(有缩略图且 Image 时显示)。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
-        public System.Windows.Visibility ThumbnailImageVisibility =>
-            Type == "Image" && ThumbnailSource != null ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        public System.Windows.Visibility ThumbnailImageVisibility
+        {
+            get
+            {
+                return Type == "Image" && Thumbnail != null && Thumbnail.Length > 0
+                    ? System.Windows.Visibility.Visible
+                    : System.Windows.Visibility.Collapsed;
+            }
+        }
 
         /// <summary>供搜索用的摘要/预览文本。</summary>
         public string DisplayText
