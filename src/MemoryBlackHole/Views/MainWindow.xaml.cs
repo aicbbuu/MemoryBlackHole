@@ -787,6 +787,19 @@ namespace MemoryBlackHole.Views
                 return f;
             }
 
+            /// <summary>
+            /// v3.0.9: 把 (Color, offset) 元组数组转为冻结的 GradientStopCollection,
+            /// 用于 Build 中 _eventHorizon / _eventHighlight 等径向渐变填充。
+            /// </summary>
+            private static GradientStopCollection FreezeStops((Color color, double offset)[] items)
+            {
+                var col = new GradientStopCollection();
+                foreach (var (c, o) in items)
+                    col.Add(new GradientStop(c, o));
+                col.Freeze();
+                return col;
+            }
+
             public void Update(double delta)
             {
                 _time += delta;
