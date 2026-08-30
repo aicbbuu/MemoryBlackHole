@@ -566,26 +566,11 @@ namespace MemoryBlackHole.Services
         private static string BuildMatchQuery(string keyword)
         {
             var terms = keyword.Split(new[] { ' ', '\u3000' }, StringSplitOptions.RemoveEmptyEntries);
-            if (terms.Length == 0) return "";
-            var parts = new List<string>(terms.Length);
+            var parts = new List<string>();
             foreach (var t in terms)
             {
                 var esc = t.Replace("\"", "\"\"");
-                // CJK 字符判定:基本汉字(0x4E00-0x9FFF) + 扩展 A/B(0x3400-0x4DBF)
-                //   + 假名(0x3040-0x30FF) + 韩文(0xAC00-0xD7AF)
-                bool hasCjk = false;
-                foreach (char c in t)
-                {
-                    if ((c >= '\u4E00' && c <= '\u9FFF') ||
-                        (c >= '\u3400' && c <= '\u4DBF') ||
-                        (c >= '\u3040' && c <= '\u30FF') ||
-                        (c >= '\uAC00' && c <= '\uD7AF'))
-                    {
-                        hasCjk = true;
-                        break;
-                    }
-                }
-                parts.Add(hasCjk ? $"\"{esc}\"" : $"\"{esc}\"*");
+                parts.Add($"\"{esc}\"*");
             }
             return string.Join(" AND ", parts);
         }

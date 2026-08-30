@@ -211,9 +211,8 @@
                            Foreground="#56617B" HorizontalAlignment="Center" Margin="0,16,0,0"/>
             </StackPanel>
             <Button Style="{StaticResource StarButton}" HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Margin="54,46,0,0" Click="FrontAdd_Click" ToolTip="新增记忆"
-                    Width="36" Height="36">
-                <TextBlock Text="✦" FontSize="22" Foreground="#F5D77C"/>
+                    Margin="54,40,0,0" Click="FrontAdd_Click" ToolTip="新增记忆">
+                <TextBlock Text="✦" FontSize="28" Foreground="#F5D77C"/>
             </Button>
             <TextBlock Text="新增记忆" HorizontalAlignment="Left" VerticalAlignment="Top"
                        Margin="66,108,0,0" Foreground="#8E97B2" FontSize="11"/>
