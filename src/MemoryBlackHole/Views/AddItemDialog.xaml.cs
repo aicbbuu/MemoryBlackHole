@@ -17,8 +17,8 @@ namespace MemoryBlackHole.Views
 
         // v3.1.0: 固定类型词(标签框左侧显示,用户不可删,确认时拼到 Tags 最前面)
         // TagsBox 只装"用户在固定词后追加的部分",最终 Tags = "{_fixedTag}{用户词非空时 ,+用户词}"
+        // FixedTagLabel 由 XAML x:Name 自动生成同名字段,无需手写声明。
         private string _fixedTag = "文本";
-        private TextBlock? FixedTagLabel => FindName("FixedTagLabel") as TextBlock;
 
         /// <summary>多文件支持：选中的文件路径列表。</summary>
         public List<string> FilePaths { get; private set; } = new();
