@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         MinWidth="340" MinHeight="120" MaxWidth="600" MaxHeight="400"
         SizeToContent="WidthAndHeight" WindowStartupLocation="CenterOwner"
-        WindowStartupLocation="CenterOwner"
         WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5">
     <Window.Resources>
