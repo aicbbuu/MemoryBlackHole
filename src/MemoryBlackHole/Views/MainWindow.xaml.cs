@@ -43,11 +43,7 @@ namespace MemoryBlackHole.Views
             return b;
         }
 
-        // v3.0.9: 黑洞动画改用 DispatcherTimer 16ms 驱动(~60fps),并检查 IsVisible 暂停
-        // 窗口最小化/隐藏时跳过 Update,减少后台 CPU 占用
-        private readonly DispatcherTimer _animTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
-
-        public MainWindow()
+public MainWindow()
         {
             InitializeComponent();
             _frontSpace = new SpaceCore(FrontCanvas, warm: true);
@@ -69,18 +65,7 @@ namespace MemoryBlackHole.Views
                 DoSearch();
             };
 
-            // v3.0.9: 黑洞动画 DispatcherTimer + IsVisible 检查
-            _animTimer.Tick += (_, _) =>
-            {
-                if (!IsVisible || WindowState == WindowState.Minimized) return;
-                var now = DateTime.UtcNow;
-                double delta = Math.Clamp((now - _lastFrame).TotalSeconds, 0, 0.05);
-                _lastFrame = now;
-                _frontSpace.Update(delta);
-                _backSpace.Update(delta);
-            };
-
-            Loaded += (_, _) =>
+Loaded += (_, _) =>
             {
                 // 从程序集自动读取版本号
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
@@ -91,16 +76,15 @@ namespace MemoryBlackHole.Views
                 DoSearch();
                 // v3.0.9: 启动时初始化侧栏(标签列表+统计),后续只在 Add/Delete 触发
                 RefreshSidebar();
-                // v3.0.9: 启动黑洞动画 DispatcherTimer
-                _animTimer.Start();
+                CompositionTarget.Rendering += OnRendering;
                 // 注意:不再自定义 PreviewMouseWheel,WPF ScrollViewer 的默认滚轮方向
                 // (滚轮上=内容上、滚轮下=内容下)即与 Windows 文件管理器一致。
                 // 之前手动 `-e.Delta` 在某些嵌套/触摸板下会反向。
             };
             Closed += (_, _) =>
             {
-                // v3.0.9: 停止黑洞动画 + 搜索防抖 timer,避免 Tick 在窗口关闭后访问已释放 UI
-                _animTimer.Stop();
+                CompositionTarget.Rendering -= OnRendering;
+                // v3.0.9: 停止搜索防抖 timer,避免 Tick 在窗口关闭后访问已释放 UI
                 _searchDebouncer.Stop();
             };
         }
@@ -156,7 +140,15 @@ namespace MemoryBlackHole.Views
             }
         }
 
-        // v3.0.9: OnRendering 改用 _animTimer DispatcherTimer(见构造函数),方法删除
+        private void OnRendering(object? sender, EventArgs e)
+        {
+            var now = DateTime.UtcNow;
+            double delta = Math.Clamp((now - _lastFrame).TotalSeconds, 0, 0.05);
+            _lastFrame = now;
+            _frontSpace.Update(delta);
+            _backSpace.Update(delta);
+        }
+
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ClickCount == 2)
@@ -541,7 +533,7 @@ namespace MemoryBlackHole.Views
                     _ => $"{stats.TotalSizeBytes / 1024.0 / 1024.0 / 1024.0:F1} GB"
                 };
                 StatsText.Text = $"📊 共 {stats.Total} 条记忆\n" +
-                                 $"📝 文本 {stats.Text}  ·  🖼 图片 {stats.Image}\n" +
+                                 $"📝 文本 {stats.Text}  ·  🌍 图片 {stats.Image}\n" +
                                  $"🎵 音频 {stats.Audio}  ·  🎬 视频 {stats.Video}\n" +
                                  $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
             }
@@ -549,13 +541,14 @@ namespace MemoryBlackHole.Views
         }
 
         /// <summary>
-        /// 2.5D 风格化黑洞:单层暖色柔光环 + 3D 立体事件视界 + 表面高光自转 + 池化粒子。
-        /// 视觉由 halo 径向渐变 + 事件视界 RadialGradientBrush(偏左上略亮) + 表面高光斑点 60s/圈旋转 + 100 颗对数螺线向心粒子组成。
+        /// v3.1.0 回退 2.5D 风格化黑洞:暖色柔光环 + 平面视界(纯黑实心) + 池化粒子。
+        /// 视觉由 halo 径向渐变(可 Flash 临时染色为蓝/红) + 事件视界纯黑实心 + 100 颗正圆对数螺线向心粒子组成。
+        /// halo 仍支持 FlashBlue/FlashRed(新增记忆 / 搜索命中反馈)。
         ///
         /// 性能策略:
         /// - 所有 Brush / Pen / Gradient 在 Build() 阶段 Freeze(),跨线程共享且无 per-frame 分配。
         /// - 100 颗粒子预分配在池中(对象复用),Update() 只改 Canvas 位置与 Opacity,不创建对象。
-        /// - 由 MainWindow 的 DispatcherTimer(16ms)+ IsVisible 检查驱动 Update(delta),最小化时自动暂停。
+        /// - 由 MainWindow 的 CompositionTarget.Rendering 驱动 Update(delta)。
         /// </summary>
         private sealed class SpaceCore
         {
@@ -597,8 +590,6 @@ namespace MemoryBlackHole.Views
             private RadialGradientBrush _haloBrush = null!;  // 不 freeze,运行时改色
             private Ellipse _disk = null!;
             private Ellipse _eventHorizon = null!;
-            // v3.0.8: 视界表面旋转高光斑点(模拟球体自转,绕中心慢转)
-            private Ellipse _eventHighlight = null!;
 
             // Halo 默认色(暖/冷)与 flash 目标色(v3.0.6:颜色加深加亮,提高饱和度+alpha)
             private readonly Color _haloDefault;
@@ -661,62 +652,16 @@ namespace MemoryBlackHole.Views
                 };
                 _canvas.Children.Add(_halo);
 
-                // 3) 事件视界 — v3.0.8 改 3D 立体:
-                //   主体仍是纯黑,但 RadialGradientBrush 让中心稍偏一侧(左/上)略亮(R=8 alpha=160),
-                //   对侧(右/下)更黑(R=0 alpha=255),模拟弯曲光的明暗,视觉上是球
+                // 3) 事件视界 — v3.1.0 回退 2.5D:纯黑实心,无 3D 立体 RadialGradient
                 _eventHorizon = new Ellipse
                 {
                     Width = EventW, Height = EventH,
                     IsHitTestVisible = false,
-                    RenderTransformOrigin = new Point(0.5, 0.5),
-                    Fill = new RadialGradientBrush
-                    {
-                        Center = new Point(0.38, 0.34),   // 偏左上
-                        GradientStops = FreezeStops(new (Color, double)[]
-                        {
-                            (Color.FromArgb(170, 0x08, 0x08, 0x10), 0.00),  // 中心:深灰微亮
-                            (Color.FromArgb(255, 0x00, 0x00, 0x00), 0.55),  // 中段:纯黑
-                            (Color.FromArgb(255, 0x00, 0x00, 0x00), 1.00),  // 边缘:纯黑
-                        })
-                    },
-                };
-                // 视界投影(向下方 8px,模拟球落到光晕上的影子)
-                var eventShadow = new Ellipse
-                {
-                    Width = EventW, Height = EventH,
-                    IsHitTestVisible = false,
-                    Opacity = 0.55,
                     Fill = Freeze(new SolidColorBrush(Color.FromRgb(0, 0, 0))),
-                    Effect = new BlurEffect { Radius = 18, KernelType = KernelType.Gaussian },
                 };
-                _canvas.Children.Add(eventShadow);
                 _canvas.Children.Add(_eventHorizon);
 
-                // 4) v3.0.8: 视界表面旋转高光斑点(模拟球体自转)
-                //   小亮斑 Ellipse,渐变填充(中心稍亮→边缘透明),
-                //   绕中心以 60 秒/圈 慢转,看着像球在自转
-                _eventHighlight = new Ellipse
-                {
-                    Width = 38 * SizeScale,
-                    Height = 38 * SizeScale,
-                    IsHitTestVisible = false,
-                    Opacity = 0.55,
-                    RenderTransformOrigin = new Point(0.5, 0.5),
-                    Fill = new RadialGradientBrush
-                    {
-                        Center = new Point(0.5, 0.5),
-                        GradientStops = FreezeStops(new (Color, double)[]
-                        {
-                            (Color.FromArgb(180, 0x30, 0x30, 0x38), 0.00),
-                            (Color.FromArgb(120, 0x18, 0x18, 0x20), 0.55),
-                            (Color.FromArgb(0,   0,    0,    0),    1.00),
-                        })
-                    },
-                };
-                _eventHighlight.RenderTransform = new RotateTransform(0);
-                _canvas.Children.Add(_eventHighlight);
-
-                // (v3.0.8 移除 _photonRing:用户要"去掉黑洞边缘那圈比较亮的环",光晕(halo)保留不变)
+                // (v3.0.8 移除 _photonRing;v3.1.0 移除 _eventHighlight/eventShadow:回退 2.5D 风格)
 
                 // 5) 100 颗稳定吸积粒子 — 正圆轨道,启动随机分布
                 // 关键改动(问题 1):
@@ -787,19 +732,6 @@ namespace MemoryBlackHole.Views
                 return f;
             }
 
-            /// <summary>
-            /// v3.0.9: 把 (Color, offset) 元组数组转为冻结的 GradientStopCollection,
-            /// 用于 Build 中 _eventHorizon / _eventHighlight 等径向渐变填充。
-            /// </summary>
-            private static GradientStopCollection FreezeStops((Color color, double offset)[] items)
-            {
-                var col = new GradientStopCollection();
-                foreach (var (c, o) in items)
-                    col.Add(new GradientStop(c, o));
-                col.Freeze();
-                return col;
-            }
-
             public void Update(double delta)
             {
                 _time += delta;
@@ -849,14 +781,9 @@ namespace MemoryBlackHole.Views
                 LayoutCentered(_halo, cx, cy, 1.0);
                 _halo.Opacity = 0.55;
 
-                // 3) 事件视界(居中)+ 表面高光斑点慢速旋转(60 秒/圈)
+                // 3) 事件视界(居中)
                 LayoutCentered(_eventHorizon, cx, cy, 1.0);
                 _eventHorizon.Opacity = 1.0;
-                LayoutCentered(_eventHighlight, cx, cy, 1.0);
-                // 高光绕中心旋转(_time 单调递增,Angle 0~360 循环)
-                // 60 秒一圈 = 0.10 rad/s = (360/60) 度/秒
-                double spinAngle = (_time * 6.0) % 360.0;   // 6 度/秒 → 60 秒/圈
-                ((RotateTransform)_eventHighlight.RenderTransform!).Angle = spinAngle;
 
                 // 4) 100 颗稳定吸积粒子 — 正圆 + 引力向心
                 // 关键(问题 1):x/y 半径相同 — 不再 ×0.52 压扁

@@ -15,6 +15,11 @@ namespace MemoryBlackHole.Views
         public string? Tags { get; private set; }
         public string SelectedType { get; private set; } = "Text";
 
+        // v3.1.0: 固定类型词(标签框左侧显示,用户不可删,确认时拼到 Tags 最前面)
+        // TagsBox 只装"用户在固定词后追加的部分",最终 Tags = "{_fixedTag}{用户词非空时 ,+用户词}"
+        private string _fixedTag = "文本";
+        private TextBlock? FixedTagLabel => FindName("FixedTagLabel") as TextBlock;
+
         /// <summary>多文件支持：选中的文件路径列表。</summary>
         public List<string> FilePaths { get; private set; } = new();
         /// <summary>多文件支持：原始文件名列表。</summary>
@@ -94,20 +99,19 @@ namespace MemoryBlackHole.Views
                 ContentBox.ToolTip = "输入链接地址（如 https://github.com/）";
             else
                 ContentBox.ToolTip = "输入文本内容";
-            // v3.0.8: 类型切换时,若标签框为空,自动填入类型名作为默认标签(用户可继续追加)
-            if (TagsBox != null && string.IsNullOrWhiteSpace(TagsBox.Text))
+            // v3.1.0: 固定类型词(_fixedTag)随类型切换,左侧 FixedTagLabel 实时显示
+            // TagsBox 不再被清空/覆盖 — 用户之前追加的标签全部保留
+            _fixedTag = SelectedType switch
             {
-                TagsBox.Text = SelectedType switch
-                {
-                    "Text"  => "文本",
-                    "Image" => "图片",
-                    "Video" => "视频",
-                    "Audio" => "音频",
-                    "File"  => "文件",
-                    "Link"  => "链接",
-                    _       => "",
-                };
-            }
+                "Text"  => "文本",
+                "Image" => "图片",
+                "Video" => "视频",
+                "Audio" => "音频",
+                "File"  => "文件",
+                "Link"  => "链接",
+                _       => "",
+            };
+            if (FixedTagLabel != null) FixedTagLabel.Text = _fixedTag;
         }
 
         private void ChooseFile_Click(object sender, RoutedEventArgs e)
@@ -195,7 +199,11 @@ namespace MemoryBlackHole.Views
 
             // 使用第一个文件的原始文件名作为对话框标题
             ItemTitle = OriginalFileNames.Count > 0 ? OriginalFileNames[0] : null;
-            Tags = string.IsNullOrWhiteSpace(TagsBox.Text) ? null : TagsBox.Text.Trim();
+            // v3.1.0: Tags = 固定类型词 + (用户词非空?"," + 用户词:"")
+            var userTags = string.IsNullOrWhiteSpace(TagsBox.Text) ? "" : TagsBox.Text.Trim();
+            Tags = string.IsNullOrEmpty(_fixedTag) ? userTags :
+                   string.IsNullOrEmpty(userTags) ? _fixedTag :
+                   _fixedTag + "," + userTags;
             DialogResult = true;
         }
 
