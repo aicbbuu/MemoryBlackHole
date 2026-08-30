@@ -84,15 +84,17 @@
                 </StackPanel>
             </Grid>
             <StackPanel Grid.Row="4" Margin="0,14,0,18">
-                <TextBlock Text="标签（必含类型词,后面可继续追加,用逗号分隔）" Foreground="#8991A8" FontSize="12" Margin="0,0,0,5"/>
+                <TextBlock Text="标签(必含类型词,后面可自定义标签,可多个用逗号分隔)" Foreground="#8991A8" FontSize="12" Margin="0,0,0,5"/>
                 <StackPanel Orientation="Horizontal">
                     <!-- v3.1.0: 固定类型词(不可删)+ 用户可编辑追加,确认时拼成 "类型词,用户词" -->
                     <Border Background="#6D5DF7" CornerRadius="4" Padding="8,4" VerticalAlignment="Center" Margin="0,0,6,0">
                         <TextBlock x:Name="FixedTagLabel" Text="文本" Foreground="White" FontSize="13"/>
                     </Border>
-                    <TextBox x:Name="TagsBox" Height="38" Background="#171D30" BorderBrush="#303B59"
+                    <!-- v3.0.1: 固定宽度 110,左对齐,不再随字数撑开 -->
+                    <TextBox x:Name="TagsBox" Width="110" Height="38" Background="#171D30" BorderBrush="#303B59"
                              Foreground="White" Padding="10,8" VerticalContentAlignment="Center"
-                             ToolTip="可继续追加其他标签,用逗号分隔"/>
+                             HorizontalAlignment="Left"
+                             ToolTip="可自定义标签,可多个用逗号分隔"/>
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">

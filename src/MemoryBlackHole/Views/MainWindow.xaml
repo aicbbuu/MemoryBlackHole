@@ -148,10 +148,12 @@
                         </Grid>
                     </Border>
                     <StackPanel Grid.Column="1" Margin="12,0,16,0">
-                        <TextBlock Text="{Binding DisplayText}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"/>
-                        <TextBlock Text="{Binding Content}" FontSize="13" Foreground="#AEB6CD"
-                                   TextWrapping="Wrap" MaxHeight="42" Margin="0,5,0,0"/>
-                        <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,8,0,0"/>
+                        <!-- v3.0.1: 主行绑定 Title(空时回退到 DisplayText),副行显示 Tags;原 Content 副行因与 DisplayText 重复已移除 -->
+                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
+                                   ToolTip="{Binding DisplayText}"/>
+                        <TextBlock Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
+                                   TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>
+                        <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,6,0,0"/>
                     </StackPanel>
                     <TextBlock Grid.Column="2" Text="{Binding TypeName}" FontSize="11"
                                Foreground="#9D8BFF" VerticalAlignment="Top"/>
@@ -271,12 +273,20 @@
                                Foreground="#68748F" TextWrapping="Wrap"/>
                 </StackPanel>
                 <!-- 右侧：搜索 + 结果 -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                    <TextBlock Text="探索记忆" FontSize="25" FontWeight="Light"
+                <Grid Grid.Column="1" VerticalAlignment="Stretch">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="探索记忆" FontSize="25" FontWeight="Light"
                                Foreground="#F3F5FF" HorizontalAlignment="Center"/>
-                    <TextBlock Text="输入关键词，让黑洞把它吐出来" FontSize="13"
+                    <TextBlock Grid.Row="1" Text="输入关键词，让黑洞把它吐出来" FontSize="13"
                                Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,8,0,20"/>
-                    <Border Height="54" CornerRadius="27" Background="#171D30"
+                    <Border Grid.Row="2" Height="54" CornerRadius="27" Background="#171D30"
                             BorderBrush="#35405F" BorderThickness="1" Padding="20,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -294,7 +304,7 @@
                         </Grid>
                     </Border>
                     <!-- v3.0.8: 搜索范围提示(全局 / 标签:xxx)醒目色块,让用户知道当前搜的是哪 -->
-                    <Border x:Name="SearchScopeBar" Margin="0,8,0,0" Padding="10,6"
+                    <Border Grid.Row="3" x:Name="SearchScopeBar" Margin="0,8,0,0" Padding="10,6"
                             CornerRadius="6" Background="#252B3F" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="搜索范围:" FontSize="11" Foreground="#8991A8" VerticalAlignment="Center"/>
@@ -302,9 +312,10 @@
                                        Foreground="#9D8BFF" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
-                    <TextBlock x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
+                    <TextBlock Grid.Row="4" x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
                                Foreground="#626D87" HorizontalAlignment="Center" Margin="0,10,0,10"/>
-                    <ScrollViewer x:Name="ResultsScrollViewer" MaxHeight="360" VerticalScrollBarVisibility="Auto"
+                    <!-- v3.0.1: ResultsScrollViewer 占满剩余高度,不再写死 360 -->
+                    <ScrollViewer Grid.Row="5" x:Name="ResultsScrollViewer" VerticalScrollBarVisibility="Auto"
                                   CanContentScroll="True">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
                                       Opacity="0.60" MouseDoubleClick="ResultsList_MouseDoubleClick"
@@ -319,7 +330,7 @@
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
                     </ScrollViewer>
-                </StackPanel>
+                </Grid>
             </Grid>
         </Grid>
         </Grid>
