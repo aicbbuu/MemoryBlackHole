@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
-        Title="记忆黑洞" Width="1200" Height="600" MinWidth="360" MinHeight="280"
+        Title="记忆黑洞" Width="1000" Height="500" MinWidth="360" MinHeight="280"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
         AllowDrop="True" Drop="Window_Drop"
