@@ -407,6 +407,7 @@ namespace MemoryBlackHole.Services
                 SELECT last_insert_rowid();";
                 AddItemParameters(cmd, item);
                 cmd.Parameters.AddWithValue("$file", destination);
+                cmd.Parameters.AddWithValue("$fdata", (object?)item.FileData ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$thumb", (object?)item.Thumbnail ?? DBNull.Value);
                 item.Id = (long)cmd.ExecuteScalar()!;
                 item.FilePath = destination;
