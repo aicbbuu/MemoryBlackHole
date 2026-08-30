@@ -533,7 +533,7 @@ Loaded += (_, _) =>
                     _ => $"{stats.TotalSizeBytes / 1024.0 / 1024.0 / 1024.0:F1} GB"
                 };
                 StatsText.Text = $"📊 共 {stats.Total} 条记忆\n" +
-                                 $"📝 文本 {stats.Text}  ·  🌍 图片 {stats.Image}\n" +
+                                 $"📝 文本 {stats.Text}  ·  🖼 图片 {stats.Image}\n" +
                                  $"🎵 音频 {stats.Audio}  ·  🎬 视频 {stats.Video}\n" +
                                  $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
             }
@@ -541,8 +541,9 @@ Loaded += (_, _) =>
         }
 
         /// <summary>
-        /// v3.1.0 回退 2.5D 风格化黑洞:暖色柔光环 + 平面视界(纯黑实心) + 池化粒子。
-        /// 视觉由 halo 径向渐变(可 Flash 临时染色为蓝/红) + 事件视界纯黑实心 + 100 颗正圆对数螺线向心粒子组成。
+        /// v3.1.1: 在 2.5D 风格基础上加 3D 球体感。
+        /// 视觉由 halo 径向渐变(可 Flash 临时染色为蓝/红) + 事件视界 3D RadialGradientBrush(中心偏左上略亮)
+        /// + 表面高光斑点 60s/圈慢自转 + 100 颗正圆对数螺线向心粒子组成。
         /// halo 仍支持 FlashBlue/FlashRed(新增记忆 / 搜索命中反馈)。
         ///
         /// 性能策略:
@@ -590,6 +591,8 @@ Loaded += (_, _) =>
             private RadialGradientBrush _haloBrush = null!;  // 不 freeze,运行时改色
             private Ellipse _disk = null!;
             private Ellipse _eventHorizon = null!;
+            // v3.1.1: 视界表面高光斑点(模拟 3D 球体受光,绕视界慢转 60s/圈)
+            private Ellipse _eventHighlight = null!;
 
             // Halo 默认色(暖/冷)与 flash 目标色(v3.0.6:颜色加深加亮,提高饱和度+alpha)
             private readonly Color _haloDefault;
@@ -652,16 +655,48 @@ Loaded += (_, _) =>
                 };
                 _canvas.Children.Add(_halo);
 
-                // 3) 事件视界 — v3.1.0 回退 2.5D:纯黑实心,无 3D 立体 RadialGradient
+                // 3) 事件视界 — v3.1.1 在 2.5D 基础上加 3D 球体感:
+                //   RadialGradientBrush 中心偏左上(0.35, 0.35)略亮,营造单光源球体
+                //   (主要仍纯黑 — 用户要求"基于当前 2.5D 升级",不是全黑 SolidColorBrush)
                 _eventHorizon = new Ellipse
                 {
                     Width = EventW, Height = EventH,
                     IsHitTestVisible = false,
-                    Fill = Freeze(new SolidColorBrush(Color.FromRgb(0, 0, 0))),
+                    RenderTransformOrigin = new Point(0.5, 0.5),
+                    Fill = new RadialGradientBrush
+                    {
+                        Center = new Point(0.35, 0.35),  // 偏左上
+                        GradientStops = FreezeStops(new (Color, double)[]
+                        {
+                            (Color.FromArgb(200, 0x18, 0x18, 0x20), 0.00),  // 中心:深灰微亮
+                            (Color.FromArgb(255, 0x00, 0x00, 0x00), 0.55),  // 中段:纯黑
+                            (Color.FromArgb(255, 0x00, 0x00, 0x00), 1.00),  // 边缘:纯黑
+                        })
+                    },
                 };
                 _canvas.Children.Add(_eventHorizon);
 
-                // (v3.0.8 移除 _photonRing;v3.1.0 移除 _eventHighlight/eventShadow:回退 2.5D 风格)
+                // 4) v3.1.1: 视界表面高光斑点(小亮斑,绕中心慢转 60s/圈,模拟球自转)
+                _eventHighlight = new Ellipse
+                {
+                    Width = 38 * SizeScale,
+                    Height = 38 * SizeScale,
+                    IsHitTestVisible = false,
+                    Opacity = 0.55,
+                    RenderTransformOrigin = new Point(0.5, 0.5),
+                    Fill = new RadialGradientBrush
+                    {
+                        Center = new Point(0.5, 0.5),
+                        GradientStops = FreezeStops(new (Color, double)[]
+                        {
+                            (Color.FromArgb(180, 0x30, 0x30, 0x38), 0.00),
+                            (Color.FromArgb(120, 0x18, 0x18, 0x20), 0.55),
+                            (Color.FromArgb(0,   0,    0,    0),    1.00),
+                        })
+                    },
+                };
+                _eventHighlight.RenderTransform = new RotateTransform(0);
+                _canvas.Children.Add(_eventHighlight);
 
                 // 5) 100 颗稳定吸积粒子 — 正圆轨道,启动随机分布
                 // 关键改动(问题 1):
@@ -732,6 +767,17 @@ Loaded += (_, _) =>
                 return f;
             }
 
+            /// <summary>v3.1.1: 把 (Color, offset) 元组数组转为冻结的 GradientStopCollection。
+            /// 用于 _eventHorizon(3D 立体 RadialGradient)和 _eventHighlight(高光斑点)填充。</summary>
+            private static GradientStopCollection FreezeStops((Color color, double offset)[] items)
+            {
+                var col = new GradientStopCollection();
+                foreach (var (c, o) in items)
+                    col.Add(new GradientStop(c, o));
+                col.Freeze();
+                return col;
+            }
+
             public void Update(double delta)
             {
                 _time += delta;
@@ -781,9 +827,14 @@ Loaded += (_, _) =>
                 LayoutCentered(_halo, cx, cy, 1.0);
                 _halo.Opacity = 0.55;
 
-                // 3) 事件视界(居中)
+                // 3) 事件视界(居中)+ 表面高光斑点慢转(60s/圈,模拟球自转)
                 LayoutCentered(_eventHorizon, cx, cy, 1.0);
                 _eventHorizon.Opacity = 1.0;
+                LayoutCentered(_eventHighlight, cx, cy, 1.0);
+                // 高光绕中心旋转:_time 单调递增,Angle 0~360 循环
+                // 60 秒/圈 = 6 度/秒
+                double spinAngle = (_time * 6.0) % 360.0;
+                ((RotateTransform)_eventHighlight.RenderTransform!).Angle = spinAngle;
 
                 // 4) 100 颗稳定吸积粒子 — 正圆 + 引力向心
                 // 关键(问题 1):x/y 半径相同 — 不再 ×0.52 压扁

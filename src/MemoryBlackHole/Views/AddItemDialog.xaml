@@ -1,8 +1,7 @@
 <Window x:Class="MemoryBlackHole.Views.AddItemDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="丢进黑洞" MinWidth="380" MinHeight="380" MaxWidth="700" MaxHeight="600"
-        SizeToContent="WidthAndHeight" WindowStartupLocation="CenterOwner"
+        Title="丢进黑洞" Height="500" Width="500" WindowStartupLocation="CenterOwner"
         WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5">
     <Window.Resources>
@@ -50,7 +49,7 @@
             <TextBlock Grid.Row="1" Text="选择类型，然后填写内容或选择文件" FontSize="12" Foreground="#8991A8" Margin="0,6,0,16"/>
             <WrapPanel x:Name="TypePanel" Grid.Row="2" Margin="-3,0,0,14">
                 <RadioButton x:Name="RText" Content="📝 文本" IsChecked="True" Tag="Text" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-                <RadioButton x:Name="RImage" Content="🌍 图片" Tag="Image" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                <RadioButton x:Name="RImage" Content="🖼 图片" Tag="Image" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
                 <RadioButton x:Name="RVVideo" Content="🎬 视频" Tag="Video" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
                 <RadioButton x:Name="RAudio" Content="🎵 音频" Tag="Audio" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
                 <RadioButton x:Name="RFile" Content="📄 文件" Tag="File" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
@@ -89,7 +88,7 @@
                 <StackPanel Orientation="Horizontal">
                     <!-- v3.1.0: 固定类型词(不可删)+ 用户可编辑追加,确认时拼成 "类型词,用户词" -->
                     <Border Background="#6D5DF7" CornerRadius="4" Padding="8,4" VerticalAlignment="Center" Margin="0,0,6,0">
-                        <TextBlock x:Name="FixedTagLabel" Text="文本" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                        <TextBlock x:Name="FixedTagLabel" Text="文本" Foreground="White" FontSize="13"/>
                     </Border>
                     <TextBox x:Name="TagsBox" Height="38" Background="#171D30" BorderBrush="#303B59"
                              Foreground="White" Padding="10,8" VerticalContentAlignment="Center"
