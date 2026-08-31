@@ -71,11 +71,14 @@ Loaded += (_, _) =>
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
-                // v3.0.3: 最大化时避让任务栏(参考 AddItemDialog/PreviewMemoryDialog 既有做法)
-                // v3.0.3 重打: WorkArea 已扣任务栏,但 WindowChrome.ResizeBorderThickness=6
-                // + Windows 系统 8 像素边距 → 主窗口减 10 像素才能贴满
-                MaxWidth = SystemParameters.WorkArea.Width - 10;
-                MaxHeight = SystemParameters.WorkArea.Height - 10;
+                // v3.0.3 重打: 不依赖 WorkArea(Win11 任务栏自隐藏时含整屏),用 PrimaryScreen 直接拿主屏分辨率
+                // WindowChrome.ResizeBorderThickness=6 + WPF 内部额外边距 + DWM 7-8px 非客户区
+                // + 1 像素余量 → 主窗口减 17 像素才能贴满
+                MaxWidth = SystemParameters.PrimaryScreenWidth - 17;
+                MaxHeight = SystemParameters.PrimaryScreenHeight - 17;
+                // v3.0.3 重打: BackFace(探索页)同样补一次(避免探索页最大化时右边/底部露边)
+                BackFace.MaxWidth = SystemParameters.PrimaryScreenWidth - 17;
+                BackFace.MaxHeight = SystemParameters.PrimaryScreenHeight - 17;
                 // 默认加载全部记忆(进入探索页即看到列表)
                 UpdateSearchScope();
                 DoSearch();

@@ -44,12 +44,12 @@ namespace MemoryBlackHole.Views
             Closed += (_, _) => CleanupTemp();
         }
 
-        // v3.0.3: 最大化时贴满"工作区"(避开任务栏),保证底部按钮可见
-        // v3.0.3 重打: 弹窗减 8 像素(WindowChrome ResizeBorderThickness=6 + Windows 8px 边距)
+        // v3.0.3 重打: 不依赖 WorkArea(Win11 任务栏自隐藏时含整屏),用 PrimaryScreen 直接拿主屏分辨率
+        // 弹窗减 13 像素(DWM 非客户区 7-8px + WPF 内部额外边距 + 1 像素余量)
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            MaxWidth = SystemParameters.WorkArea.Width - 8;
-            MaxHeight = SystemParameters.WorkArea.Height - 8;
+            MaxWidth = SystemParameters.PrimaryScreenWidth - 13;
+            MaxHeight = SystemParameters.PrimaryScreenHeight - 13;
         }
 
         private void ShowContent()

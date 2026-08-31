@@ -5,10 +5,13 @@
         Title="查看记忆" Width="650" Height="520" WindowStartupLocation="CenterOwner"
         WindowStyle="None" ResizeMode="CanResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
+        Opacity="0.80"
         Loaded="Window_Loaded">
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
-                            GlassFrameThickness="0" CornerRadius="0"
+        <!-- v3.0.3 重打: ResizeBorderThickness 改 0(用户失去边缘拖拽改大小,只能拖标题栏/最大化);
+             CornerRadius=10 让 Window 本身有系统圆角,配合外层 Border 圆角完整显示 -->
+        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0"
+                            GlassFrameThickness="0" CornerRadius="10"
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
@@ -50,7 +53,8 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#E50F1424">
+    <!-- v3.0.3 重打: 外层 Border CornerRadius 从 16 改 12(配合 WindowChrome 圆角显示,不被 ResizeBorderThickness 6 像素吃掉) -->
+    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="12" Background="#E50F1424">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="42"/>

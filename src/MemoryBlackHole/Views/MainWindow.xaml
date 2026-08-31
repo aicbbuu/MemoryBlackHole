@@ -150,9 +150,11 @@
                     </Border>
                     <StackPanel Grid.Column="1" Margin="12,0,16,0">
                         <!-- v3.0.3 重打: 主行用 ContentOrFileName Converter 区分: Text/Link → Content,其它类型 → OriginalFileName;
-                             不再固定截 10 字,由 TextTrimming="CharacterEllipsis" + TextWrapping="NoWrap" 自适应宽度截断 -->
+                             不再固定截 10 字,由 TextTrimming="CharacterEllipsis" + TextWrapping="NoWrap" 自适应宽度截断;
+                             加 MaxWidth=320 + HorizontalAlignment=Stretch 触发 TextTrimming(父 Grid * 列默认填满,TextBlock 实际宽无限,不加 MaxWidth 不触发) -->
                         <TextBlock Text="{Binding Converter={StaticResource ContentOrFileName}}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
                                    TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                                   MaxWidth="320" HorizontalAlignment="Stretch"
                                    ToolTip="{Binding DisplayText}"/>
                         <TextBlock Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
                                    TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>
@@ -320,7 +322,7 @@
                                   CanContentScroll="True"
                                   PreviewMouseWheel="ResultsScrollViewer_PreviewMouseWheel">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
-                                      Opacity="0.90" MouseDoubleClick="ResultsList_MouseDoubleClick"
+                                      Opacity="0.80" MouseDoubleClick="ResultsList_MouseDoubleClick"
                                       ScrollViewer.CanContentScroll="True"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
