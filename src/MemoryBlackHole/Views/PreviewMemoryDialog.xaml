@@ -50,7 +50,7 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#0F1424">
+    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#E50F1424">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="42"/>
@@ -83,7 +83,10 @@
                         <StackPanel x:Name="LinkPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <TextBlock Text="🔗 链接记忆" FontSize="18" Foreground="White" HorizontalAlignment="Center"/>
                             <TextBlock x:Name="LinkUrlText" Foreground="#9D8BFF" TextWrapping="Wrap"
-                                       TextAlignment="Center" Margin="0,12,0,16" FontSize="13"/>
+                                       TextAlignment="Center" Margin="0,12,0,8" FontSize="13"/>
+                            <!-- v3.0.3 重打: 增加提示文字,引导用户使用下方按钮打开 -->
+                            <TextBlock Text="(点击下方在浏览器中打开)" Foreground="#8991A8" FontSize="11"
+                                       TextAlignment="Center" Margin="0,0,0,12"/>
                             <Button Content="打开链接" Width="110" Click="OpenLink_Click"
                                     Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
                         </StackPanel>

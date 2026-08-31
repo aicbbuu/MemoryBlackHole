@@ -72,8 +72,10 @@ Loaded += (_, _) =>
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
                 // v3.0.3: 最大化时避让任务栏(参考 AddItemDialog/PreviewMemoryDialog 既有做法)
-                MaxWidth = SystemParameters.WorkArea.Width;
-                MaxHeight = SystemParameters.WorkArea.Height;
+                // v3.0.3 重打: WorkArea 已扣任务栏,但 WindowChrome.ResizeBorderThickness=6
+                // + Windows 系统 8 像素边距 → 主窗口减 10 像素才能贴满
+                MaxWidth = SystemParameters.WorkArea.Width - 10;
+                MaxHeight = SystemParameters.WorkArea.Height - 10;
                 // 默认加载全部记忆(进入探索页即看到列表)
                 UpdateSearchScope();
                 DoSearch();

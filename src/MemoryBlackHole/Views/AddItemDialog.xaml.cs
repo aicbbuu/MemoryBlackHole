@@ -235,10 +235,11 @@ namespace MemoryBlackHole.Views
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
         // v3.0.3: 最大化时贴满"工作区"(避开任务栏),保证底部按钮可见
+        // v3.0.3 重打: 弹窗减 8 像素(WindowChrome ResizeBorderThickness=6 + Windows 8px 边距)
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            MaxWidth = SystemParameters.WorkArea.Width;
-            MaxHeight = SystemParameters.WorkArea.Height;
+            MaxWidth = SystemParameters.WorkArea.Width - 8;
+            MaxHeight = SystemParameters.WorkArea.Height - 8;
         }
     }
 }

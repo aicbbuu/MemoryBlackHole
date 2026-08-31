@@ -18,7 +18,7 @@
     </shell:WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <converters:TypeAwareDisplayConverter x:Key="TypeAwareDisplay"/>
+        <converters:ContentOrFileNameConverter x:Key="ContentOrFileName"/>
         <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#080A12" Offset="0"/>
             <GradientStop Color="#11162A" Offset="0.55"/>
@@ -149,8 +149,10 @@
                         </Grid>
                     </Border>
                     <StackPanel Grid.Column="1" Margin="12,0,16,0">
-                        <!-- v3.0.2: 主行用 TypeAwareDisplay Converter 区分: Text → Content(前10字+...),其它类型 → OriginalFileName;不再用 Title 避免重复 -->
-                        <TextBlock Text="{Binding Converter={StaticResource TypeAwareDisplay}}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
+                        <!-- v3.0.3 重打: 主行用 ContentOrFileName Converter 区分: Text/Link → Content,其它类型 → OriginalFileName;
+                             不再固定截 10 字,由 TextTrimming="CharacterEllipsis" + TextWrapping="NoWrap" 自适应宽度截断 -->
+                        <TextBlock Text="{Binding Converter={StaticResource ContentOrFileName}}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
+                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
                                    ToolTip="{Binding DisplayText}"/>
                         <TextBlock Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
                                    TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>

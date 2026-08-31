@@ -5,7 +5,6 @@
         Title="新增" Height="450" Width="600" WindowStartupLocation="CenterOwner"
         WindowStyle="None" ResizeMode="CanResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
-        Opacity="0.90"
         Loaded="Window_Loaded">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
@@ -71,7 +70,7 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#0F1424">
+    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#E50F1424">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="42"/>

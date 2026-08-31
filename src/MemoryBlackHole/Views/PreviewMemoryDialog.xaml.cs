@@ -27,6 +27,10 @@ namespace MemoryBlackHole.Views
             _service = service;
             TitleText.Text = string.IsNullOrWhiteSpace(item.Title) ? item.DisplayText : item.Title;
             MetaText.Text = $"{item.TypeName}  ·  {item.CreatedAt:yyyy-MM-dd HH:mm}";
+            // v3.0.3 重打: 文字/链接类型不显示上方 Title 区域(内容本身就是 Title,显示重复)
+            bool showTitle = _item.Type != "Text" && _item.Type != "Link";
+            TitleText.Visibility = showTitle ? Visibility.Visible : Visibility.Collapsed;
+            MetaText.Visibility = showTitle ? Visibility.Visible : Visibility.Collapsed;
             ShowContent();
             // v3.0.9: ESC 退出全屏预览(双击图片后用 ESC 回到普通窗口大小)
             PreviewKeyDown += (_, e) =>
@@ -41,10 +45,11 @@ namespace MemoryBlackHole.Views
         }
 
         // v3.0.3: 最大化时贴满"工作区"(避开任务栏),保证底部按钮可见
+        // v3.0.3 重打: 弹窗减 8 像素(WindowChrome ResizeBorderThickness=6 + Windows 8px 边距)
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            MaxWidth = SystemParameters.WorkArea.Width;
-            MaxHeight = SystemParameters.WorkArea.Height;
+            MaxWidth = SystemParameters.WorkArea.Width - 8;
+            MaxHeight = SystemParameters.WorkArea.Height - 8;
         }
 
         private void ShowContent()
