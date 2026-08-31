@@ -71,6 +71,9 @@ Loaded += (_, _) =>
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
+                // v3.0.3: 最大化时避让任务栏(参考 AddItemDialog/PreviewMemoryDialog 既有做法)
+                MaxWidth = SystemParameters.WorkArea.Width;
+                MaxHeight = SystemParameters.WorkArea.Height;
                 // 默认加载全部记忆(进入探索页即看到列表)
                 UpdateSearchScope();
                 DoSearch();

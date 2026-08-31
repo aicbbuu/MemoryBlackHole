@@ -19,7 +19,6 @@
 
     <Window.Resources>
         <converters:TypeAwareDisplayConverter x:Key="TypeAwareDisplay"/>
-        <converters:StripFixedTagConverter x:Key="StripFixedTag"/>
         <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#080A12" Offset="0"/>
             <GradientStop Color="#11162A" Offset="0.55"/>
@@ -135,7 +134,6 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <!-- v3.1.4: 缩略图(图片类型有 Thumbnail BLOB 时显示,否则占位 emoji) -->
                     <Border Width="42" Height="42" CornerRadius="10" Background="#6D5DF7">
@@ -151,15 +149,13 @@
                         </Grid>
                     </Border>
                     <StackPanel Grid.Column="1" Margin="12,0,16,0">
-                        <!-- v3.0.2: 主行用 TypeAwareDisplay Converter 区分: Text → Content(前60字),其它类型 → OriginalFileName;不再用 Title 避免重复 -->
+                        <!-- v3.0.2: 主行用 TypeAwareDisplay Converter 区分: Text → Content(前10字+...),其它类型 → OriginalFileName;不再用 Title 避免重复 -->
                         <TextBlock Text="{Binding Converter={StaticResource TypeAwareDisplay}}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
                                    ToolTip="{Binding DisplayText}"/>
-                        <TextBlock Text="{Binding Tags, Converter={StaticResource StripFixedTag}}" FontSize="12" Foreground="#9D8BFF"
+                        <TextBlock Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
                                    TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>
                         <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,6,0,0"/>
                     </StackPanel>
-                    <TextBlock Grid.Column="2" Text="{Binding TypeName}" FontSize="11"
-                               Foreground="#9D8BFF" VerticalAlignment="Top"/>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -322,7 +318,7 @@
                                   CanContentScroll="True"
                                   PreviewMouseWheel="ResultsScrollViewer_PreviewMouseWheel">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
-                                      Opacity="0.80" MouseDoubleClick="ResultsList_MouseDoubleClick"
+                                      Opacity="0.90" MouseDoubleClick="ResultsList_MouseDoubleClick"
                                       ScrollViewer.CanContentScroll="True"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
