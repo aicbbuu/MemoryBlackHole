@@ -87,6 +87,7 @@ Loaded += (_, _) =>
                 // v3.0.9: 停止搜索防抖 timer,避免 Tick 在窗口关闭后访问已释放 UI
                 _searchDebouncer.Stop();
             };
+        }
 
         // v3.0.3: 记忆列表滚轮方向修正(用户实测 WPF 默认在嵌套布局下反向,与 Windows 习惯相反)
         // 滚轮上 → 内容上(VerticalOffset 减小);用 e.Handled = true 阻止 ScrollViewer 默认再处理
@@ -95,7 +96,6 @@ Loaded += (_, _) =>
             if (sender is not System.Windows.Controls.ScrollViewer sv) return;
             sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta);
             e.Handled = true;
-        }
         }
 
         private void WindowFrame_SizeChanged(object sender, SizeChangedEventArgs e)
