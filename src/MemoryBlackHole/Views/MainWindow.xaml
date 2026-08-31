@@ -209,7 +209,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,42">
                 <TextBlock Text="把记忆交给黑洞" FontSize="28" FontWeight="Light"
                            Foreground="#F3F5FF" HorizontalAlignment="Center"/>
-                <TextBlock Text="一切留在本地 · 一切都能找回" FontSize="13"
+                <TextBlock Text="纯本地「万物收纳盒」——随手记•随时找" FontSize="13"
                            Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,9,0,0"/>
                 <TextBlock Text="双击黑洞探索记忆空间" FontSize="11"
                            Foreground="#56617B" HorizontalAlignment="Center" Margin="0,16,0,0"/>
