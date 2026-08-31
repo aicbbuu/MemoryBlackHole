@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
+        xmlns:converters="clr-namespace:MemoryBlackHole.Converters"
         Title="记忆黑洞" Width="950" Height="500" MinWidth="360" MinHeight="280"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
@@ -17,6 +18,7 @@
     </shell:WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <converters:TypeAwareDisplayConverter x:Key="TypeAwareDisplay"/>
         <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#080A12" Offset="0"/>
             <GradientStop Color="#11162A" Offset="0.55"/>
@@ -148,8 +150,8 @@
                         </Grid>
                     </Border>
                     <StackPanel Grid.Column="1" Margin="12,0,16,0">
-                        <!-- v3.0.1: 主行绑定 Title(空时回退到 DisplayText),副行显示 Tags;原 Content 副行因与 DisplayText 重复已移除 -->
-                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
+                        <!-- v3.0.2: 主行用 TypeAwareDisplay Converter 区分: Text → Content(前60字),其它类型 → OriginalFileName;不再用 Title 避免重复 -->
+                        <TextBlock Text="{Binding Converter={StaticResource TypeAwareDisplay}}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
                                    ToolTip="{Binding DisplayText}"/>
                         <TextBlock Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
                                    TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>

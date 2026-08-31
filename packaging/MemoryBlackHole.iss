@@ -1,6 +1,6 @@
 #define AppName "MemoryBlackHole"
 #define AppDisplayName "记忆黑洞"
-#define AppVersion "3.0.1"
+#define AppVersion "3.0.2"
 #define AppPublisher "vicz"
 #define AppExeName "MemoryBlackHole.exe"
 

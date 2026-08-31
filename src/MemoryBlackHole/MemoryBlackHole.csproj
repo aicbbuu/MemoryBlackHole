@@ -8,10 +8,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MemoryBlackHole</RootNamespace>
     <AssemblyName>MemoryBlackHole</AssemblyName>
-    <Version>3.0.1</Version>
-    <AssemblyVersion>3.0.1.0</AssemblyVersion>
-    <FileVersion>3.0.1.0</FileVersion>
-    <InformationalVersion>3.0.1</InformationalVersion>
+    <Version>3.0.2</Version>
+    <AssemblyVersion>3.0.2.0</AssemblyVersion>
+    <FileVersion>3.0.2.0</FileVersion>
+    <InformationalVersion>3.0.2</InformationalVersion>
     <Authors>vicz</Authors>
     <Company>vicz</Company>
     <Product>记忆黑洞</Product>
