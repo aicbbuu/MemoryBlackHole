@@ -1,10 +1,16 @@
 <Window x:Class="MemoryBlackHole.Views.AddItemDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="丢进黑洞" Height="400" Width="500" WindowStartupLocation="CenterOwner"
-        WindowStyle="SingleBorderWindow" ResizeMode="CanResize" ShowInTaskbar="False"
+        WindowStyle="None" ResizeMode="CanResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
         Opacity="0.60">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
+                            GlassFrameThickness="0" CornerRadius="0"
+                            UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <Style x:Key="TypeRadio" TargetType="RadioButton">
             <Setter Property="Foreground" Value="#B9C1D8"/>
@@ -26,6 +32,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="DialogWindowButton" TargetType="Button">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#B8C1D8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#222A42"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -40,70 +70,92 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#0F1424" Padding="26">
+    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="16" Background="#0F1424">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                <RowDefinition Height="42"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Text="新增一条记忆" FontSize="23" FontWeight="Light" Foreground="White"/>
-            <TextBlock Grid.Row="1" Text="选择类型，然后填写内容或选择文件" FontSize="12" Foreground="#8991A8" Margin="0,6,0,16"/>
-            <WrapPanel x:Name="TypePanel" Grid.Row="2" Margin="-3,0,0,14">
-                <RadioButton x:Name="RText" Content="📝 文本" IsChecked="True" Tag="Text" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-                <RadioButton x:Name="RImage" Content="🖼 图片" Tag="Image" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-                <RadioButton x:Name="RVVideo" Content="🎬 视频" Tag="Video" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-                <RadioButton x:Name="RAudio" Content="🎵 音频" Tag="Audio" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-                <RadioButton x:Name="RFile" Content="📄 文件" Tag="File" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-                <RadioButton x:Name="RLink" Content="🔗 链接" Tag="Link" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
-            </WrapPanel>
-            <Grid Grid.Row="3">
-                <TextBox x:Name="ContentBox" Background="#171D30" BorderBrush="#303B59" Foreground="White"
-                         Padding="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
-                         VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
-                <StackPanel x:Name="FilePanel" Visibility="Collapsed"
-                            HorizontalAlignment="Stretch" VerticalAlignment="Top">
-                    <TextBlock Text="支持图片、视频、音频和其他文件。900MB 的文件分块流式存入本地 SQLite 数据库；超过阈值文件副本保存在 .memoryblackhole/files"
-                               Foreground="#AEB6CD" FontSize="12" LineHeight="20"
-                               TextWrapping="Wrap" TextAlignment="Left"
-                               HorizontalAlignment="Stretch" Margin="0,0,0,12"/>
-                    <Button Content="选择本地文件" Width="150" Height="40" HorizontalAlignment="Left"
-                            Background="#6D5DF7" Foreground="White" BorderThickness="0" Cursor="Hand" Click="ChooseFile_Click"/>
-                    <TextBlock x:Name="SelectedFileText" Text="尚未选择文件" Foreground="#8991A8"
-                               FontSize="12" TextWrapping="Wrap" TextAlignment="Left"
-                               HorizontalAlignment="Stretch" Margin="0,14,0,0"/>
-                    <ListBox x:Name="FileListBox" Background="#171D30" BorderBrush="#303B59"
-                             BorderThickness="1" Margin="0,8,0,0" MaxHeight="140"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
-                             Foreground="#E9ECF5" FontSize="12"
-                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding}" Padding="6,3" Foreground="#C5CBE0"/>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+            <!-- v3.0.3: 自定义标题栏(WindowStyle=None 必需),支持拖动 + 最小化/最大化/关闭 -->
+            <Grid Grid.Row="0" Background="#0C101D" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="丢进黑洞" FontSize="13" FontWeight="SemiBold"
+                           Foreground="#F5F7FF" VerticalAlignment="Center" Margin="18,0,0,0"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,6,0">
+                    <Button Content="—" Style="{StaticResource DialogWindowButton}" Click="Minimize_Click"/>
+                    <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource DialogWindowButton}" Click="Maximize_Click"/>
+                    <Button Content="×" Style="{StaticResource DialogWindowButton}" Click="Close_Click"/>
                 </StackPanel>
             </Grid>
-            <StackPanel Grid.Row="4" Margin="0,14,0,18">
-                <TextBlock Text="标签(必含类型词,后面可自定义标签,可多个用逗号分隔)" Foreground="#8991A8" FontSize="12" Margin="0,0,0,5"/>
-                <StackPanel Orientation="Horizontal">
-                    <!-- v3.1.0: 固定类型词(不可删)+ 用户可编辑追加,确认时拼成 "类型词,用户词" -->
-                    <Border Background="#6D5DF7" CornerRadius="4" Padding="8,4" VerticalAlignment="Center" Margin="0,0,6,0">
-                        <TextBlock x:Name="FixedTagLabel" Text="文本" Foreground="White" FontSize="13"/>
-                    </Border>
-                    <!-- v3.0.1: 固定宽度 110,左对齐,不再随字数撑开 -->
-                    <TextBox x:Name="TagsBox" Width="110" Height="28" Background="#171D30" BorderBrush="#303B59"
-                             Foreground="White" Padding="10,6" VerticalContentAlignment="Center"
-                             HorizontalAlignment="Left"
-                             ToolTip="可自定义标签,可多个用逗号分隔"/>
-                </StackPanel>
-            </StackPanel>
-            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="取消" Width="84" Margin="0,0,10,0" Click="Cancel_Click"
-                        Background="Transparent" Foreground="#C5CBE0" BorderBrush="#34405D" BorderThickness="1" Padding="10,8"/>
-                <Button Content="丢进黑洞" Width="110" Click="Confirm_Click"
-                        Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
-            </StackPanel>
+            <Border Grid.Row="1" Padding="26">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="新增一条记忆" FontSize="23" FontWeight="Light" Foreground="White"/>
+                    <TextBlock Grid.Row="1" Text="选择类型，然后填写内容或选择文件" FontSize="12" Foreground="#8991A8" Margin="0,6,0,16"/>
+                    <WrapPanel x:Name="TypePanel" Grid.Row="2" Margin="-3,0,0,14">
+                        <RadioButton x:Name="RText" Content="📝 文本" IsChecked="True" Tag="Text" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                        <RadioButton x:Name="RImage" Content="🖼 图片" Tag="Image" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                        <RadioButton x:Name="RVVideo" Content="🎬 视频" Tag="Video" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                        <RadioButton x:Name="RAudio" Content="🎵 音频" Tag="Audio" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                        <RadioButton x:Name="RFile" Content="📄 文件" Tag="File" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                        <RadioButton x:Name="RLink" Content="🔗 链接" Tag="Link" Style="{StaticResource TypeRadio}" Checked="Type_Changed"/>
+                    </WrapPanel>
+                    <Grid Grid.Row="3">
+                        <TextBox x:Name="ContentBox" Background="#171D30" BorderBrush="#303B59" Foreground="White"
+                                 Padding="12" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                                 VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
+                        <StackPanel x:Name="FilePanel" Visibility="Collapsed"
+                                    HorizontalAlignment="Stretch" VerticalAlignment="Top">
+                            <TextBlock Text="支持图片、视频、音频和其他文件。900MB 的文件分块流式存入本地 SQLite 数据库；超过阈值文件副本保存在 .memoryblackhole/files"
+                                       Foreground="#AEB6CD" FontSize="12" LineHeight="20"
+                                       TextWrapping="Wrap" TextAlignment="Left"
+                                       HorizontalAlignment="Stretch" Margin="0,0,0,12"/>
+                            <Button Content="选择本地文件" Width="150" Height="40" HorizontalAlignment="Left"
+                                    Background="#6D5DF7" Foreground="White" BorderThickness="0" Cursor="Hand" Click="ChooseFile_Click"/>
+                            <TextBlock x:Name="SelectedFileText" Text="尚未选择文件" Foreground="#8991A8"
+                                       FontSize="12" TextWrapping="Wrap" TextAlignment="Left"
+                                       HorizontalAlignment="Stretch" Margin="0,14,0,0"/>
+                            <ListBox x:Name="FileListBox" Background="#171D30" BorderBrush="#303B59"
+                                     BorderThickness="1" Margin="0,8,0,0" MaxHeight="140"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                                     Foreground="#E9ECF5" FontSize="12"
+                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Padding="6,3" Foreground="#C5CBE0"/>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Grid.Row="4" Margin="0,14,0,18">
+                        <TextBlock Text="标签(必含类型词,后面可自定义标签,可多个用逗号分隔)" Foreground="#8991A8" FontSize="12" Margin="0,0,0,5"/>
+                        <StackPanel Orientation="Horizontal">
+                            <!-- v3.1.0: 固定类型词(不可删)+ 用户可编辑追加,确认时拼成 "类型词,用户词" -->
+                            <Border Background="#6D5DF7" CornerRadius="4" Padding="8,4" VerticalAlignment="Center" Margin="0,0,6,0">
+                                <TextBlock x:Name="FixedTagLabel" Text="文本" Foreground="White" FontSize="13"/>
+                            </Border>
+                            <!-- v3.0.1: 固定宽度 110,左对齐,不再随字数撑开 -->
+                            <TextBox x:Name="TagsBox" Width="110" Height="28" Background="#171D30" BorderBrush="#303B59"
+                                     Foreground="White" Padding="10,6" VerticalContentAlignment="Center"
+                                     HorizontalAlignment="Left"
+                                     ToolTip="可自定义标签,可多个用逗号分隔"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="取消" Width="84" Margin="0,0,10,0" Click="Cancel_Click"
+                                Background="Transparent" Foreground="#C5CBE0" BorderBrush="#34405D" BorderThickness="1" Padding="10,8"/>
+                        <Button Content="丢进黑洞" Width="110" Click="Confirm_Click"
+                                Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>

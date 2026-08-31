@@ -206,6 +206,29 @@ namespace MemoryBlackHole.Views
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
+        // v3.0.3: 自定义标题栏 — 拖动 / 最小化 / 最大化切换
+        private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                ToggleMaximize();
+                return;
+            }
+            if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+                DragMove();
+        }
+
+        private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+        private void Maximize_Click(object sender, RoutedEventArgs e) => ToggleMaximize();
+
+        private void ToggleMaximize()
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+            if (MaximizeButton != null)
+                MaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+        }
+
         private void CleanupTemp()
         {
             // v3.0.9: 先释放图片 FileStream(若存在),再删临时文件
