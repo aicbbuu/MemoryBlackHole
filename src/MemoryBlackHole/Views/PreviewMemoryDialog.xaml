@@ -4,7 +4,8 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="查看记忆" Width="650" Height="520" WindowStartupLocation="CenterOwner"
         WindowStyle="None" ResizeMode="CanResize" ShowInTaskbar="False"
-        AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5">
+        AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
+        Loaded="Window_Loaded">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6"
                             GlassFrameThickness="0" CornerRadius="0"

@@ -233,5 +233,12 @@ namespace MemoryBlackHole.Views
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+        // v3.0.3: 最大化时贴满"工作区"(避开任务栏),保证底部按钮可见
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            MaxWidth = SystemParameters.WorkArea.Width;
+            MaxHeight = SystemParameters.WorkArea.Height;
+        }
     }
 }

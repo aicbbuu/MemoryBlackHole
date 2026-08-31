@@ -40,6 +40,13 @@ namespace MemoryBlackHole.Views
             Closed += (_, _) => CleanupTemp();
         }
 
+        // v3.0.3: 最大化时贴满"工作区"(避开任务栏),保证底部按钮可见
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            MaxWidth = SystemParameters.WorkArea.Width;
+            MaxHeight = SystemParameters.WorkArea.Height;
+        }
+
         private void ShowContent()
         {
             if (_item.Type == "Text")

@@ -320,7 +320,7 @@
                     <ScrollViewer Grid.Row="5" x:Name="ResultsScrollViewer" VerticalScrollBarVisibility="Auto"
                                   CanContentScroll="True">
                         <ItemsControl x:Name="ResultsList" ItemTemplate="{StaticResource ResultTemplate}"
-                                      Opacity="0.60" MouseDoubleClick="ResultsList_MouseDoubleClick"
+                                      Opacity="0.80" MouseDoubleClick="ResultsList_MouseDoubleClick"
                                       ScrollViewer.CanContentScroll="True"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
