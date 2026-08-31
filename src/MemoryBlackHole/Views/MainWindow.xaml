@@ -286,7 +286,7 @@
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Text="探索记忆" FontSize="25" FontWeight="Light"
                                Foreground="#F3F5FF" HorizontalAlignment="Center"/>
-                    <TextBlock Grid.Row="1" Text="输入关键词，让黑洞把它吐出来" FontSize="13"
+                    <TextBlock Grid.Row="1" Text="输入关键词，搜索记忆" FontSize="13"
                                Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,8,0,20"/>
                     <Border Grid.Row="2" Height="54" CornerRadius="27" Background="#171D30"
                             BorderBrush="#35405F" BorderThickness="1" Padding="20,0">
