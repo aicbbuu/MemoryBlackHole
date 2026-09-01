@@ -28,7 +28,6 @@ namespace MemoryBlackHole.Views
         private bool _flipping;
         private DateTime _lastFrame;
         private string? _activeTag;
-        private Color _accentColor = Color.FromRgb(0x6D, 0x5D, 0xF7);
         // v3.0.7: 搜索防抖 — 连续输入 300ms 内只触发一次真实搜索
         // (连续点标签 / 连续打字 / 快速按 Enter 都被合并,避免无谓的 DB 查询)
         private readonly DispatcherTimer _searchDebouncer = new() { Interval = TimeSpan.FromMilliseconds(300) };
@@ -38,6 +37,9 @@ namespace MemoryBlackHole.Views
         private static readonly Brush _tagScopeBrush    = CreateFrozenBrush(Color.FromRgb(0xFF, 0xB0, 0x60));
         // v3.0.9: WindowFrame Clip 缓存 — resize 时只改 Rect,不 new RectangleGeometry
         private RectangleGeometry? _windowFrameClip;
+        // v3.1.0(建议12): 最大化时把窗口四角圆角/裁剪半径置 0(消除四角小缺口),Normal 还原为 18。
+        private readonly double _frameCornerRadius = 18;
+        private double _clipRadius = 18;
         // v3.0.3 重打(问题1): 无边框窗口最大化用 WM_GETMINMAXINFO(见 NativeWindow)+ 最大化时
         // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
         private readonly Thickness _resizeBorder;
@@ -98,6 +100,9 @@ Loaded += (_, _) =>
                 CompositionTarget.Rendering -= OnRendering;
                 // v3.0.9: 停止搜索防抖 timer,避免 Tick 在窗口关闭后访问已释放 UI
                 _searchDebouncer.Stop();
+                // v3.1.0: 退出时释放长连接 + WAL checkpoint,防止库文件只增不减
+                try { _service?.Checkpoint(); } catch { }
+                _service?.Dispose();
             };
         }
 
@@ -140,11 +145,16 @@ Loaded += (_, _) =>
         {
             double w = WindowFrame.ActualWidth, h = WindowFrame.ActualHeight;
             if (w <= 0 || h <= 0) return;
+            // v3.1.0(建议12): 最大化时圆角/裁剪半径置 0,消除四角小缺口;Normal 还原 18。
+            double r = WindowState == WindowState.Maximized ? 0 : _frameCornerRadius;
+            if (WindowFrame.CornerRadius.TopLeft != r)
+                WindowFrame.CornerRadius = new CornerRadius(r);
             // v3.0.9: 复用缓存的 RectangleGeometry,只改 Rect,避免每次 resize new 对象触发 GC
-            if (_windowFrameClip == null)
+            if (_windowFrameClip == null || _clipRadius != r)
             {
-                _windowFrameClip = new RectangleGeometry(new Rect(0, 0, w, h), 18, 18);
+                _windowFrameClip = new RectangleGeometry(new Rect(0, 0, w, h), r, r);
                 WindowFrame.Clip = _windowFrameClip;
+                _clipRadius = r;
             }
             else
             {
@@ -153,7 +163,7 @@ Loaded += (_, _) =>
         }
 
         /// <summary>全局键盘快捷键。</summary>
-        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (Keyboard.Modifiers == ModifierKeys.Control)
             {
@@ -176,7 +186,7 @@ Loaded += (_, _) =>
                             SearchBox?.Focus();
                             SearchBox?.SelectAll();
                         }
-                        else if (EnsureAccess())
+                        else if (await EnsureAccess())
                             FlipToBack();
                         break;
                     case Key.W: // Ctrl+W: 关闭窗口
@@ -236,12 +246,17 @@ Loaded += (_, _) =>
             }
         }
 
-        /// <summary>拖拽文件到窗口 → 弹出新增对话框预填文件。</summary>
-        /// <summary>添加文件(非文本/链接):v3.0.9 查重 + 询问 + 实际 AddFile</summary>
-        private void AddFileWithDupCheck(MemoryItem item, string sourcePath)
+        /// <summary>添加文件(非文本/链接):v3.1.0 查重 + 询问 + 后台异步 AddFile(避免大文件写入冻结 UI)。</summary>
+        /// <returns><c>true</c> 完成添加;某个文件被跳过/失败由内部处理。</returns>
+        private async Task AddFileWithDupCheckAsync(MemoryItem item, string sourcePath)
         {
+            if (_service is not { } service) return;
+            // v3.1.0: 先用真实文件大小,否则查重时 FileSizeBytes=0 永远查不到重复。
+            try { item.FileSizeBytes = new FileInfo(sourcePath).Length; }
+            catch (Exception ex) { App.Log("读取文件大小失败: " + sourcePath + " " + ex.Message); return; }
+
             // 查重:同 OriginalFileName + FileSizeBytes + IsDeleted=0
-            var dup = _service?.FindDuplicate(item.OriginalFileName, item.FileSizeBytes);
+            var dup = service.FindDuplicate(item.OriginalFileName, item.FileSizeBytes);
             if (dup != null)
             {
                 bool stillAdd = ConfirmDialog.ShowConfirm("记忆可能重复",
@@ -249,7 +264,27 @@ Loaded += (_, _) =>
                     this, isWarning: false);
                 if (!stillAdd) return;
             }
-            _service?.AddFile(item, sourcePath);
+
+            // v3.1.0: 缩略图依赖 WPF STA,必须在 UI 线程生成;文件复制/大 BLOB 写入放后台,避免界面冻结。
+            byte[]? thumb = item.Type == "Image" ? DataService.GenerateThumbnail(sourcePath, 100) : null;
+
+            try
+            {
+                await Task.Run(() => service.AddFile(item, sourcePath, thumb));
+            }
+            catch (Exception ex)
+            {
+                App.Log("AddFile 失败: " + sourcePath + " " + ex);
+                new NoticeDialog("添加失败", $"无法保存文件。\n{ex.Message}") { Owner = this }.ShowDialog();
+            }
+        }
+
+        /// <summary>设置忙碌态:显示等待光标,防止文件写入期间重复触发。</summary>
+        private bool _busy;
+        private void SetBusy(bool busy)
+        {
+            _busy = busy;
+            Mouse.OverrideCursor = busy ? Cursors.Wait : null;
         }
 
         /// <summary>v3.0.9: 字节数 → 友好字符串(B/KB/MB/GB)。</summary>
@@ -261,9 +296,9 @@ Loaded += (_, _) =>
             return $"{value:0.##} {units[unit]}";
         }
 
-        private void Window_Drop(object sender, DragEventArgs e)
+        private async void Window_Drop(object sender, DragEventArgs e)
         {
-            if (_service == null) return;
+            if (_service == null || _busy) return;
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var files = (string[]?)e.Data.GetData(DataFormats.FileDrop);
             if (files == null || files.Length == 0) return;
@@ -283,24 +318,32 @@ Loaded += (_, _) =>
                 var dialog = new AddItemDialog(files) { Owner = this };
                 if (dialog.ShowDialog() != true) return;
 
-                for (int i = 0; i < dialog.FilePaths.Count; i++)
+                SetBusy(true);
+                try
                 {
-                    AddFileWithDupCheck(new MemoryItem
+                    for (int i = 0; i < dialog.FilePaths.Count; i++)
                     {
-                        Type = dialog.SelectedType,
-                        Title = dialog.OriginalFileNames[i],
-                        Content = dialog.OriginalFileNames[i],
-                        Note = null,
-                        Tags = dialog.Tags,
-                        OriginalFileName = dialog.OriginalFileNames[i]
-                    }, dialog.FilePaths[i]);
-                }
+                        await AddFileWithDupCheckAsync(new MemoryItem
+                        {
+                            Type = dialog.SelectedType,
+                            Title = dialog.OriginalFileNames[i],
+                            Content = dialog.OriginalFileNames[i],
+                            Note = null,
+                            Tags = dialog.Tags,
+                            OriginalFileName = dialog.OriginalFileNames[i]
+                        }, dialog.FilePaths[i]);
+                    }
 
-                // 问题 2:新增记忆成功 → 黑洞光晕变蓝(5 秒后回默认)
-                _frontSpace.FlashBlue();
-                ScheduleSearch();
-                // v3.0.9: 新增记忆后刷新侧栏(标签计数/统计)
-                RefreshSidebar();
+                    // 问题 2:新增记忆成功 → 黑洞光晕变蓝(5 秒后回默认)
+                    _frontSpace.FlashBlue();
+                    ScheduleSearch();
+                    // v3.0.9: 新增记忆后刷新侧栏(标签计数/统计)
+                    RefreshSidebar();
+                }
+                finally
+                {
+                    SetBusy(false);
+                }
             }
             catch (Exception ex)
             {
@@ -310,13 +353,13 @@ Loaded += (_, _) =>
             }
         }
 
-        private void FrontCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private async void FrontCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ClickCount == 2 && EnsureAccess())
+            if (e.ClickCount == 2 && await EnsureAccess())
                 FlipToBack();
         }
 
-        private bool EnsureAccess()
+        private async Task<bool> EnsureAccess()
         {
             if (_service == null) return false;
             bool passed;
@@ -324,13 +367,14 @@ Loaded += (_, _) =>
             {
                 var setup = new PasswordDialog(true) { Owner = this };
                 if (setup.ShowDialog() != true) return false;
-                _service.SetPassword(setup.Password);
+                // v3.1.0: PBKDF2 异步派生,避免 UI 卡顿
+                await _service.SetPassword(setup.Password);
                 passed = true;
             }
             else
             {
                 var verify = new PasswordDialog(false) { Owner = this };
-                passed = verify.ShowDialog() == true && _service.VerifyPassword(verify.Password);
+                passed = verify.ShowDialog() == true && await _service.VerifyPassword(verify.Password);
                 if (!passed)
                 {
                     new NoticeDialog("访问被拒绝", "密码不正确，无法进入记忆空间。") { Owner = this }.ShowDialog();
@@ -384,9 +428,9 @@ Loaded += (_, _) =>
 
         private void FrontAdd_Click(object sender, RoutedEventArgs e) => OpenAddDialog();
 
-        private void OpenAddDialog()
+        private async void OpenAddDialog()
         {
-            if (_service == null) return;
+            if (_service == null || _busy) return;
             var dialog = new AddItemDialog { Owner = this };
             if (dialog.ShowDialog() != true) return;
 
@@ -415,18 +459,26 @@ Loaded += (_, _) =>
             }
             else
             {
-                // 非文本：流式写入 SQLite BLOB 或外部文件（避免 OOM）
-                for (int i = 0; i < dialog.FilePaths.Count; i++)
+                // 非文本：流式写入 SQLite BLOB 或外部文件（避免 OOM）— v3.1.0 移到后台避免冻结
+                SetBusy(true);
+                try
                 {
-                    AddFileWithDupCheck(new MemoryItem
+                    for (int i = 0; i < dialog.FilePaths.Count; i++)
                     {
-                        Type = dialog.SelectedType,
-                        Title = dialog.OriginalFileNames[i],
-                        Content = dialog.OriginalFileNames[i],
-                        Note = null,
-                        Tags = dialog.Tags,
-                        OriginalFileName = dialog.OriginalFileNames[i]
-                    }, dialog.FilePaths[i]);
+                        await AddFileWithDupCheckAsync(new MemoryItem
+                        {
+                            Type = dialog.SelectedType,
+                            Title = dialog.OriginalFileNames[i],
+                            Content = dialog.OriginalFileNames[i],
+                            Note = null,
+                            Tags = dialog.Tags,
+                            OriginalFileName = dialog.OriginalFileNames[i]
+                        }, dialog.FilePaths[i]);
+                    }
+                }
+                finally
+                {
+                    SetBusy(false);
                 }
             }
 
@@ -584,7 +636,7 @@ Loaded += (_, _) =>
                                  $"🎵 音频 {stats.Audio}  ·  🎬 视频 {stats.Video}\n" +
                                  $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
             }
-            catch { /* 静默 */ }
+            catch (Exception ex) { App.Log("RefreshSidebar 失败: " + ex.Message); }
         }
 
         /// <summary>
@@ -755,14 +807,6 @@ Loaded += (_, _) =>
                 _haloTarget = _haloRed;
                 _haloT = 0;
                 _haloFlashing = true;
-            }
-
-            /// <summary>立即重置为默认色(不等待)。</summary>
-            public void ResetHalo()
-            {
-                _haloFlashing = false;
-                _haloT = 0;
-                _haloBrush.GradientStops[0].Color = _haloDefault;
             }
 
             private static Brush MakeRadialGlow(Color inner, Color outer)

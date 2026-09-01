@@ -16,13 +16,22 @@ namespace MemoryBlackHole
             try { File.AppendAllText(LogFile, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {msg}\n"); } catch { }
         }
 
+        /// <summary>v3.1.0: 字节数 → 友好字符串(B/KB/MB/GB),多个弹窗共用,避免重复。</summary>
+        public static string FormatSize(long bytes)
+        {
+            string[] units = { "B", "KB", "MB", "GB" };
+            double value = bytes; int unit = 0;
+            while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
+            return $"{value:0.##} {units[unit]}";
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
             Log("=== MemoryBlackHole 启动 ===");
 
-            // 全局异常捕获：任何未处理异常都【记录到日志文件 + 弹窗】，不会用 Handled=true 吞掉。
+            // 全局异常捕获：记录到日志文件 + 弹窗，并设为 Handled(=true)让程序报错后继续运行。
             DispatcherUnhandledException += (_, args) =>
             {
                 Log("DispatcherUnhandledException: " + args.Exception);
@@ -36,7 +45,8 @@ namespace MemoryBlackHole
                 {
                     Log("MessageBox.Show 失败: " + mbEx);
                 }
-                // 不设为 Handled，让程序继续（窗口若已创建则保留，避免静默消失）
+                // v3.1.0: 必须设为 Handled=true,否则 WPF 会按"未处理异常"终止应用(与"让程序继续"的意图相反)。
+                args.Handled = true;
             };
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             {

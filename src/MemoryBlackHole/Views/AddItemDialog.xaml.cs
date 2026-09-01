@@ -89,12 +89,12 @@ namespace MemoryBlackHole.Views
                 OriginalFileNames.Add(info.Name);
                 FileSizes.Add(info.Length);
                 totalSize += info.Length;
-                displayItems.Add($"{info.Name}  ({FormatSize(info.Length)})");
+                displayItems.Add($"{info.Name}  ({App.FormatSize(info.Length)})");
             }
 
             ContentBox.Visibility = Visibility.Collapsed;
             FilePanel.Visibility = Visibility.Visible;
-            SelectedFileText.Text = $"拖入了 {filePaths.Length} 个文件（共 {FormatSize(totalSize)}）";
+            SelectedFileText.Text = $"拖入了 {filePaths.Length} 个文件（共 {App.FormatSize(totalSize)}）";
             FileListBox.ItemsSource = displayItems;
             FileListBox.Visibility = Visibility.Visible;
         }
@@ -158,23 +158,15 @@ namespace MemoryBlackHole.Views
                 FileSizes.Add(info.Length);
                 totalSize += info.Length;
 
-                string sizeStr = FormatSize(info.Length);
+                string sizeStr = App.FormatSize(info.Length);
                 displayItems.Add($"{info.Name}  ({sizeStr})");
             }
 
             // 更新 UI
             int count = displayItems.Count;
-            SelectedFileText.Text = $"已选择 {count} 个文件（共 {FormatSize(totalSize)}）";
+            SelectedFileText.Text = $"已选择 {count} 个文件（共 {App.FormatSize(totalSize)}）";
             FileListBox.ItemsSource = displayItems;
             FileListBox.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private static string FormatSize(long bytes)
-        {
-            string[] units = { "B", "KB", "MB", "GB" };
-            double value = bytes; int unit = 0;
-            while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
-            return $"{value:0.##} {units[unit]}";
         }
 
         private void Confirm_Click(object sender, RoutedEventArgs e)

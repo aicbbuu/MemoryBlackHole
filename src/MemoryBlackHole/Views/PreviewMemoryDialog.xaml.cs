@@ -133,7 +133,7 @@ namespace MemoryBlackHole.Views
             else
             {
                 FileInfoPanel.Visibility = Visibility.Visible;
-                FileInfoText.Text = $"{_item.OriginalFileName ?? "未命名文件"}\n{FormatSize(_item.FileSizeBytes)}";
+                FileInfoText.Text = $"{_item.OriginalFileName ?? "未命名文件"}\n{App.FormatSize(_item.FileSizeBytes)}";
                 OpenFileButton.Visibility = string.IsNullOrWhiteSpace(path) ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -219,16 +219,21 @@ namespace MemoryBlackHole.Views
         private void OpenLink_Click(object sender, RoutedEventArgs e)
         {
             var url = _item.Content ?? _item.Title;
-            if (!string.IsNullOrEmpty(url))
+            if (string.IsNullOrEmpty(url)) return;
+            // v3.1.0: 仅允许 http/https,避免经 UseShellExecute 唤起其它协议处理器(dangerous scheme)。
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
-                try
-                {
-                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    new NoticeDialog("打开失败", $"无法打开链接。\n{ex.Message}") { Owner = this }.ShowDialog();
-                }
+                new NoticeDialog("无法打开", "仅支持 http:// 或 https:// 链接。") { Owner = this }.ShowDialog();
+                return;
+            }
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                new NoticeDialog("打开失败", $"无法打开链接。\n{ex.Message}") { Owner = this }.ShowDialog();
             }
         }
 
@@ -276,18 +281,21 @@ namespace MemoryBlackHole.Views
 
         private void CleanupTemp()
         {
-            // v3.0.9: 先释放图片 FileStream(若存在),再删临时文件
-            try { _imageStream?.Dispose(); } catch { }
+            // v3.1.0: 先显式停止/关闭媒体,释放其对临时文件的锁定,再删临时文件,避免 %TEMP% 残留。
+            try { if (MediaPreview != null) { MediaPreview.Stop(); MediaPreview.Close(); } } catch (Exception ex) { App.Log("MediaPreview 释放失败: " + ex.Message); }
+            // v3.0.9: 再释放图片 FileStream(若存在)
+            try { _imageStream?.Dispose(); } catch (Exception ex) { App.Log("_imageStream 释放失败: " + ex.Message); }
             _imageStream = null;
-            try { if (_tempPreview != null && File.Exists(_tempPreview)) File.Delete(_tempPreview); } catch { }
-        }
-
-        private static string FormatSize(long bytes)
-        {
-            string[] units = { "B", "KB", "MB", "GB" };
-            double value = bytes; int unit = 0;
-            while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
-            return $"{value:0.##} {units[unit]}";
+            // v3.1.0: 删除失败不再静默,记录日志
+            try
+            {
+                if (_tempPreview != null && File.Exists(_tempPreview))
+                    File.Delete(_tempPreview);
+            }
+            catch (Exception ex)
+            {
+                App.Log("删除临时文件失败: " + _tempPreview + " " + ex.Message);
+            }
         }
     }
 }

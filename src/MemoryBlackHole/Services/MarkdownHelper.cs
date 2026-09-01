@@ -4,7 +4,6 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace MemoryBlackHole.Services
 {
@@ -195,56 +194,69 @@ namespace MemoryBlackHole.Services
         {
             var result = new List<Inline>();
             int i = 0;
+            int plainStart = 0;
+
+            void FlushPlain(int end)
+            {
+                // v3.1.0: 累积连续普通文本为单段,避免每字符一个 Run 的布局/GC 压力。
+                if (end > plainStart) result.Add(new Run(text[plainStart..end]));
+            }
+
             while (i < text.Length)
             {
+                char c = text[i];
+
                 // 粗体 **text** 或 __text__
-                if ((i + 1 < text.Length && text[i] == '*' && text[i + 1] == '*') ||
-                    (i + 1 < text.Length && text[i] == '_' && text[i + 1] == '_'))
+                if (i + 1 < text.Length && (text[i + 1] == c) && (c == '*' || c == '_'))
                 {
-                    char c = text[i];
                     int end = text.IndexOf($"{c}{c}", i + 2);
                     if (end > i + 2)
                     {
-                        var bold = new Bold(new Run(text[(i + 2)..end]));
-                        result.Add(bold);
+                        FlushPlain(i);
+                        result.Add(new Bold(new Run(text[(i + 2)..end])));
+                        plainStart = end + 2;
                         i = end + 2;
                         continue;
                     }
                 }
+
                 // 斜体 *text* 或 _text_
-                if (text[i] == '*' || text[i] == '_')
+                if (c == '*' || c == '_')
                 {
-                    char c = text[i];
                     int end = text.IndexOf(c, i + 1);
                     if (end > i + 1 && text[end - 1] != c) // 不是粗体
                     {
-                        var italic = new Italic(new Run(text[(i + 1)..end]));
-                        result.Add(italic);
+                        FlushPlain(i);
+                        result.Add(new Italic(new Run(text[(i + 1)..end])));
+                        plainStart = end + 1;
                         i = end + 1;
                         continue;
                     }
                 }
+
                 // 行内代码 `code`
-                if (text[i] == '`')
+                if (c == '`')
                 {
                     int end = text.IndexOf('`', i + 1);
                     if (end > i + 1)
                     {
+                        FlushPlain(i);
                         var code = new Run(text[(i + 1)..end])
                         {
                             FontFamily = new FontFamily("Cascadia Code, Consolas, Courier New"),
                             Background = darkMode ? new SolidColorBrush(Color.FromRgb(0x27, 0x31, 0x49)) : new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6))
                         };
                         result.Add(code);
+                        plainStart = end + 1;
                         i = end + 1;
                         continue;
                     }
                 }
-                // 普通文本
-                int next = i + 1;
-                result.Add(new Run(text[i].ToString()));
+
+                // 普通字符：继续累积到 plainStart,遇到下一个标记再切段
                 i++;
             }
+            FlushPlain(i);
             return result;
         }
     }
