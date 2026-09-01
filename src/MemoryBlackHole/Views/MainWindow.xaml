@@ -20,21 +20,21 @@
     <Window.Resources>
         <converters:ContentOrFileNameConverter x:Key="ContentOrFileName"/>
         <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#080A12" Offset="0"/>
-            <GradientStop Color="#11162A" Offset="0.55"/>
-            <GradientStop Color="#070910" Offset="1"/>
+            <GradientStop Color="#151820" Offset="0"/>
+            <GradientStop Color="#1F2638" Offset="0.55"/>
+            <GradientStop Color="#14171E" Offset="1"/>
         </LinearGradientBrush>
         <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
             <GradientStop Color="#BBA7FF" Offset="0"/>
             <GradientStop Color="#7564F7" Offset="0.48"/>
             <GradientStop Color="#39D7FF" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="MutedBrush" Color="#8991A8"/>
-        <SolidColorBrush x:Key="LineBrush" Color="#293149"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#97A1BB"/>
+        <SolidColorBrush x:Key="LineBrush" Color="#3E4A6C"/>
 
         <Style x:Key="PillButton" TargetType="Button">
             <Setter Property="Foreground" Value="#F5F7FF"/>
-            <Setter Property="Background" Value="#20263A"/>
+            <Setter Property="Background" Value="#303B56"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="16,9"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -46,7 +46,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="PillBorder" Property="Background" Value="#303B5D"/>
+                                <Setter TargetName="PillBorder" Property="Background" Value="#434F79"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -57,7 +57,7 @@
             <Setter Property="Width" Value="50"/>
             <Setter Property="Height" Value="38"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#B8C1D8"/>
+            <Setter Property="Foreground" Value="#C3CBDF"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="20"/>
@@ -69,7 +69,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBorder" Property="Background" Value="#222A42"/>
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#37436A"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -79,7 +79,7 @@
         </Style>
         <Style x:Key="StarButton" TargetType="Button">
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="#1C2340"/>
+            <Setter Property="Background" Value="#2A3452"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="#554BBA"/>
             <Setter Property="Width" Value="62"/>
@@ -93,7 +93,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="StarBorder" Property="Background" Value="#303A66"/>
+                                <Setter TargetName="StarBorder" Property="Background" Value="#475380"/>
                                 <Setter TargetName="StarBorder" Property="BorderBrush" Value="#A99BFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -104,9 +104,9 @@
 
         <Style x:Key="CircleIconButton" TargetType="Button">
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="#1A2133"/>
+            <Setter Property="Background" Value="#27304A"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#35405F"/>
+            <Setter Property="BorderBrush" Value="#495678"/>
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
             <Setter Property="Template">
@@ -118,7 +118,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CircleBorder" Property="Background" Value="#303A66"/>
+                                <Setter TargetName="CircleBorder" Property="Background" Value="#475380"/>
                                 <Setter TargetName="CircleBorder" Property="BorderBrush" Value="#A99BFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -128,7 +128,7 @@
         </Style>
 
         <DataTemplate x:Key="ResultTemplate" DataType="{x:Type models:MemoryItem}">
-            <Border Background="#171D30" BorderBrush="#2C3654" BorderThickness="1"
+            <Border Background="#232B3E" BorderBrush="#414E72" BorderThickness="1"
                     CornerRadius="12" Padding="16" Margin="0,0,0,10">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -165,7 +165,7 @@
                                    ToolTip="{Binding DisplayText}"/>
                         <TextBlock Grid.Row="1" Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
                                    TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>
-                        <TextBlock Grid.Row="2" Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,6,0,0"/>
+                        <TextBlock Grid.Row="2" Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#7B87A6" Margin="0,6,0,0"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -181,7 +181,7 @@
         </Grid.RowDefinitions>
 
         <!-- 自定义标题栏 -->
-        <Grid Grid.Row="0" Background="#0C101D" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Grid Grid.Row="0" Background="#181D2A" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -190,7 +190,7 @@
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
                 <Grid Width="34" Height="34">
                     <Ellipse Fill="{StaticResource AccentGradient}"/>
-                    <Ellipse Width="22" Height="22" Fill="#080A12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Ellipse Width="22" Height="22" Fill="#151820" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Ellipse Width="9" Height="9" Fill="#FFE7A6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <Ellipse Width="29" Height="8" Stroke="#FFF0C2" StrokeThickness="1.4" Opacity="0.85"
                              HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
@@ -201,7 +201,7 @@
                            Foreground="#F5F7FF" Margin="10,0,0,0" VerticalAlignment="Center"/>
             </StackPanel>
             <TextBlock Grid.Column="1" Text="LOCAL MEMORY VAULT" FontSize="10"
-                       Foreground="#59647C" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                       Foreground="#67749B" VerticalAlignment="Center" HorizontalAlignment="Center"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,10,0">
                 <Button Content="—" Style="{StaticResource WindowButton}" Click="Minimize_Click"/>
                 <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource WindowButton}" Click="Maximize_Click"/>
@@ -220,28 +220,28 @@
                 <TextBlock Text="纯本地「万物收纳盒」——随手记•随时找" FontSize="13"
                            Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,9,0,0"/>
                 <TextBlock Text="双击黑洞探索记忆空间" FontSize="11"
-                           Foreground="#56617B" HorizontalAlignment="Center" Margin="0,16,0,0"/>
+                           Foreground="#647098" HorizontalAlignment="Center" Margin="0,16,0,0"/>
             </StackPanel>
             <Button Style="{StaticResource StarButton}" HorizontalAlignment="Left" VerticalAlignment="Top"
                     Margin="54,40,0,0" Click="FrontAdd_Click" ToolTip="新增记忆">
                 <TextBlock Text="✦" FontSize="28" Foreground="#F5D77C"/>
             </Button>
             <TextBlock Text="新增记忆" HorizontalAlignment="Left" VerticalAlignment="Top"
-                       Margin="66,108,0,0" Foreground="#8E97B2" FontSize="11"/>
+                       Margin="66,108,0,0" Foreground="#9AA5C1" FontSize="11"/>
 
             <!-- 右下角 GitHub 问号图标 + 版本号 -->
             <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,26,26" Orientation="Horizontal">
-                <TextBlock x:Name="VersionText" Text="v1.0.0" FontSize="10" Foreground="#4A5570"
+                <TextBlock x:Name="VersionText" Text="v1.0.0" FontSize="10" Foreground="#5F6B93"
                            VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <Button Style="{StaticResource CircleIconButton}" Click="OpenGitHub_Click" ToolTip="项目主页">
-                    <TextBlock Text="?" FontSize="16" FontWeight="Bold" Foreground="#9AA3BA"/>
+                    <TextBlock Text="?" FontSize="16" FontWeight="Bold" Foreground="#A5B0C8"/>
                 </Button>
             </StackPanel>
         </Grid>
 
         <!-- 背面：黑洞 + 搜索 + 标签侧栏 + 统计 -->
         <Grid x:Name="BackFace" Grid.Row="1" Visibility="Collapsed"
-              Background="#090C16" RenderTransformOrigin="0.5,0.5">
+              Background="#181B24" RenderTransformOrigin="0.5,0.5">
             <Grid.RenderTransform><ScaleTransform x:Name="BackFlipScale" ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
             <Canvas x:Name="BackCanvas" Background="Transparent"/>
             <Grid Margin="34,32,34,30">
@@ -254,21 +254,21 @@
                     <Button Content="← 返回黑洞" Style="{StaticResource PillButton}"
                             HorizontalAlignment="Left" Click="BackToFront"/>
                     <!-- 分隔 -->
-                    <Rectangle Height="1" Fill="#20263A" Margin="0,18,0,14"/>
-                    <TextBlock Text="📌 标签" FontSize="12" Foreground="#8991A8" Margin="0,0,0,8"/>
+                    <Rectangle Height="1" Fill="#303B56" Margin="0,18,0,14"/>
+                    <TextBlock Text="📌 标签" FontSize="12" Foreground="#97A1BB" Margin="0,0,0,8"/>
                     <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="TagsList" FontSize="13">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Padding="6,5" Margin="0,1" CornerRadius="8"
-                                            Background="#171D30" Cursor="Hand"
+                                            Background="#232B3E" Cursor="Hand"
                                             MouseLeftButtonDown="TagItem_MouseDown">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Key}" Foreground="#C5CBE0"/>
+                                            <TextBlock Text="{Binding Key}" Foreground="#CED5E7"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Value, StringFormat='({0})'}"
                                                        Foreground="#9D8BFF" FontSize="11" Margin="8,0,0,0"/>
                                         </Grid>
@@ -278,9 +278,9 @@
                         </ItemsControl>
                     </ScrollViewer>
                     <!-- 统计 -->
-                    <Rectangle Height="1" Fill="#20263A" Margin="0,10,0,10"/>
+                    <Rectangle Height="1" Fill="#303B56" Margin="0,10,0,10"/>
                     <TextBlock x:Name="StatsText" Text="加载中…" FontSize="11"
-                               Foreground="#68748F" TextWrapping="Wrap"/>
+                               Foreground="#7B87A6" TextWrapping="Wrap"/>
                 </StackPanel>
                 <!-- 右侧：搜索 + 结果 -->
                 <Grid Grid.Column="1" VerticalAlignment="Stretch">
@@ -296,8 +296,8 @@
                                Foreground="#F3F5FF" HorizontalAlignment="Center"/>
                     <TextBlock Grid.Row="1" Text="输入关键词，搜索记忆" FontSize="13"
                                Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" Margin="0,8,0,20"/>
-                    <Border Grid.Row="2" Height="54" CornerRadius="27" Background="#171D30"
-                            BorderBrush="#35405F" BorderThickness="1" Padding="20,0">
+                    <Border Grid.Row="2" Height="54" CornerRadius="27" Background="#232B3E"
+                            BorderBrush="#495678" BorderThickness="1" Padding="20,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -309,21 +309,21 @@
                             <TextBox x:Name="SearchBox" Grid.Column="1" Background="Transparent" BorderThickness="0"
                                      Foreground="#F4F6FF" CaretBrush="#A78BFA" FontSize="15"
                                      VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
-                            <TextBlock Grid.Column="2" Text="Enter" FontSize="11" Foreground="#66718C"
+                            <TextBlock Grid.Column="2" Text="Enter" FontSize="11" Foreground="#727FA0"
                                        VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
                     <!-- v3.0.8: 搜索范围提示(全局 / 标签:xxx)醒目色块,让用户知道当前搜的是哪 -->
                     <Border Grid.Row="3" x:Name="SearchScopeBar" Margin="0,8,0,0" Padding="10,6"
-                            CornerRadius="6" Background="#252B3F" HorizontalAlignment="Center">
+                            CornerRadius="6" Background="#354060" HorizontalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="搜索范围:" FontSize="11" Foreground="#8991A8" VerticalAlignment="Center"/>
+                            <TextBlock Text="搜索范围:" FontSize="11" Foreground="#97A1BB" VerticalAlignment="Center"/>
                             <TextBlock x:Name="SearchScopeText" Text="全局搜索" FontSize="12" FontWeight="SemiBold"
                                        Foreground="#9D8BFF" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                     <TextBlock Grid.Row="4" x:Name="SearchStatus" Text="黑洞正在等待你的关键词" FontSize="12"
-                               Foreground="#626D87" HorizontalAlignment="Center" Margin="0,10,0,10"/>
+                               Foreground="#727FA2" HorizontalAlignment="Center" Margin="0,10,0,10"/>
                     <!-- v3.0.1: ResultsScrollViewer 占满剩余高度,不再写死 360 -->
                     <ScrollViewer Grid.Row="5" x:Name="ResultsScrollViewer" VerticalScrollBarVisibility="Auto"
                                   CanContentScroll="True"

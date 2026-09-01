@@ -46,7 +46,7 @@ namespace MemoryBlackHole.Services
                         // 结束代码块
                         var codeBlock = new Paragraph
                         {
-                            Background = darkMode ? new SolidColorBrush(Color.FromRgb(0x1A, 0x20, 0x35)) : new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6)),
+                            Background = darkMode ? new SolidColorBrush(Color.FromRgb(0x27, 0x31, 0x49)) : new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6)),
                             FontFamily = new FontFamily("Cascadia Code, Consolas, Courier New"),
                             FontSize = 12,
                             Margin = new Thickness(0, 4, 0, 4),
@@ -233,7 +233,7 @@ namespace MemoryBlackHole.Services
                         var code = new Run(text[(i + 1)..end])
                         {
                             FontFamily = new FontFamily("Cascadia Code, Consolas, Courier New"),
-                            Background = darkMode ? new SolidColorBrush(Color.FromRgb(0x1A, 0x20, 0x35)) : new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6))
+                            Background = darkMode ? new SolidColorBrush(Color.FromRgb(0x27, 0x31, 0x49)) : new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6))
                         };
                         result.Add(code);
                         i = end + 1;

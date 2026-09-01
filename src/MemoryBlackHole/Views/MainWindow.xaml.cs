@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
@@ -37,11 +38,10 @@ namespace MemoryBlackHole.Views
         private static readonly Brush _tagScopeBrush    = CreateFrozenBrush(Color.FromRgb(0xFF, 0xB0, 0x60));
         // v3.0.9: WindowFrame Clip 缓存 — resize 时只改 Rect,不 new RectangleGeometry
         private RectangleGeometry? _windowFrameClip;
-        // v3.0.3 重打(问题1): 无边框透明窗口最大化时,系统按 WindowChrome.ResizeBorderThickness 在四周留透明边;
-        // 记录该值,在 StateChanged 里用外层根 Border 的负 Margin 抵消,让内容真正铺满工作区。
-        private readonly double _resizeBorder;
-        // 重入保护:StateChanged 里改 Left/Top/Width/Height 不会再次触发 StateChanged,这里做防御。
-        private bool _syncMaximize;
+        // v3.0.3 重打(问题1): 无边框窗口最大化用 WM_GETMINMAXINFO(见 NativeWindow)+ 最大化时
+        // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
+        private readonly Thickness _resizeBorder;
+        private HwndSource? _hwndSource;
         private static Brush CreateFrozenBrush(Color c)
         {
             var b = new SolidColorBrush(c);
@@ -52,12 +52,12 @@ namespace MemoryBlackHole.Views
 public MainWindow()
         {
             InitializeComponent();
-            _resizeBorder = WindowChrome.GetWindowChrome(this)?.ResizeBorderThickness.Left ?? 0;
+            // v3.0.3 重打(问题1): 无边框窗口最大化标准做法 — WM_GETMINMAXINFO 接管尺寸/位置(NativeWindow),
+            // StateChanged 里按状态切换 WindowChrome.ResizeBorderThickness(最大化=0,还原=原值)。
+            _resizeBorder = WindowChrome.GetWindowChrome(this)?.ResizeBorderThickness ?? new Thickness(0);
+            SourceInitialized += MainWindow_SourceInitialized;
+            Closed += MainWindow_Closed;
             StateChanged += Window_StateChanged;
-            // v3.0.3 重打(问题1): 普通状态也将窗口限制在屏幕真实可用区域内,避免被拖出屏幕/超屏放大(不再减固定像素)。
-            var workArea = SystemParameters.WorkArea;
-            MaxWidth = workArea.Width;
-            MaxHeight = workArea.Height;
             _frontSpace = new SpaceCore(FrontCanvas, warm: true);
             _backSpace = new SpaceCore(BackCanvas, warm: false);
             _lastFrame = DateTime.UtcNow;
@@ -111,44 +111,29 @@ Loaded += (_, _) =>
         }
 
         /// <summary>
-        /// v3.0.3 重打(问题1): 无边框透明窗口(WPF 默认最大化会铺满整屏盖住任务栏,弹窗 ResizeBorderThickness=0 时
-        /// 没有负 Margin 可抵消,导致右边/底部留边)。统一方案:
-        ///   1. 最大化时手动把 Left/Top/Width/Height 设成 SystemParameters.WorkArea(真实可用区域,不遮挡任务栏);
-        ///   2. 根 Border 负 Margin 抵消各自真实的 WindowChrome.ResizeBorderThickness(主窗=6,弹窗=0),内容铺满工作区;
-        ///   3. Normal 时还原 Margin=0,并用 WPF 原生 RestoreBounds 还原窗口位置尺寸。
-        /// 三个窗口行为一致,不再使用「减固定像素」。
+        /// v3.0.3 重打(问题1): 无边框窗口最大化的标准做法(主窗口 / 新增弹窗 / 查看弹窗一致):
+        ///   - 窗口句柄创建后,把 WM_GETMINMAXINFO 钩子挂到 HwndSource(NativeWindow.WndProc),
+        ///     由系统按"窗口当前所在显示器的工作区"接管最大化尺寸与位置(物理像素,多屏/DPI 正确)。
+        ///   - StateChanged 里按状态切换 WindowChrome.ResizeBorderThickness:最大化=0(消除内容区内缩,不再留边),
+        ///     Normal 还原为原值。
+        ///   - 不再用负 Margin、不再手动设 Left/Top/Width/Height、不再用 MaxWidth/MaxHeight / RestoreBounds,
+        ///     普通状态可拖拽上限由 WM_GETMINMAXINFO 的 ptMaxTrackSize 保证。
         /// </summary>
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+        {
+            _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            _hwndSource?.AddHook(NativeWindow.WndProc);
+        }
+
+        private void MainWindow_Closed(object? sender, EventArgs e)
+        {
+            _hwndSource?.RemoveHook(NativeWindow.WndProc);
+            _hwndSource = null;
+        }
+
         private void Window_StateChanged(object? sender, EventArgs e)
         {
-            if (WindowFrame == null || _syncMaximize) return;
-
-            if (WindowState == WindowState.Maximized)
-            {
-                var workArea = SystemParameters.WorkArea;
-                // MaxWidth/MaxHeight 已在构造时按 WorkArea 设好(WPF 原生最大化无法超出,避免盖任务栏、避免回摆)。
-                _syncMaximize = true;
-                Left = workArea.Left;
-                Top = workArea.Top;
-                Width = workArea.Width;
-                Height = workArea.Height;
-                _syncMaximize = false;
-                // 抵消 WindowChrome.ResizeBorderThickness 在四周留的透明边(弹窗=0 时为无操作,边界已铺满)。
-                WindowFrame.Margin = new Thickness(-_resizeBorder);
-            }
-            else
-            {
-                WindowFrame.Margin = new Thickness(0);
-                var rb = RestoreBounds;
-                if (rb.Width > 0 && rb.Height > 0)
-                {
-                    _syncMaximize = true;
-                    Left = rb.Left;
-                    Top = rb.Top;
-                    Width = rb.Width;
-                    Height = rb.Height;
-                    _syncMaximize = false;
-                }
-            }
+            NativeWindow.ApplyMaximizeState(this, _resizeBorder);
         }
 
         private void WindowFrame_SizeChanged(object sender, SizeChangedEventArgs e)

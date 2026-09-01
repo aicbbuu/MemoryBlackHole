@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Shell;
 using Microsoft.Win32;
 
@@ -28,22 +29,20 @@ namespace MemoryBlackHole.Views
         /// <summary>多文件支持：文件大小列表。</summary>
         public List<long> FileSizes { get; private set; } = new();
 
-        // v3.0.3 重打(问题1): 最大化时按 WindowChrome.ResizeBorderThickness 负 Margin 补偿,铺满工作区不露边。
-        private readonly double _resizeBorder;
-        // 重入保护:StateChanged 里改 Left/Top/Width/Height 不会再次触发 StateChanged,这里做防御。
-        private bool _syncMaximize;
+        // v3.0.3 重打(问题1): 无边框窗口最大化用 WM_GETMINMAXINFO(见 NativeWindow)+ 最大化时
+        // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
+        private readonly Thickness _resizeBorder;
+        private HwndSource? _hwndSource;
 
         // v3.0.9: 移除了未使用的 MaxFileSize / MaxTotalSize / MaxFileCount 三个常量
 
         public AddItemDialog()
         {
             InitializeComponent();
-            _resizeBorder = WindowChrome.GetWindowChrome(this)?.ResizeBorderThickness.Left ?? 0;
+            _resizeBorder = WindowChrome.GetWindowChrome(this)?.ResizeBorderThickness ?? new Thickness(0);
+            SourceInitialized += AddItemDialog_SourceInitialized;
+            Closed += AddItemDialog_Closed;
             StateChanged += Window_StateChanged;
-            // v3.0.3 重打(问题1): 普通状态也将窗口限制在屏幕真实可用区域内,避免被拖出屏幕/超屏放大(不再减固定像素)。
-            var workArea = SystemParameters.WorkArea;
-            MaxWidth = workArea.Width;
-            MaxHeight = workArea.Height;
             // v3.0.9: 拖入文件模式时 FilePanel 可见,ContentBox 是 Collapsed,
             // 直接 Focus ContentBox 无效,应 Focus FileListBox(用户可立刻按方向键/Enter 选)
             Loaded += (_, _) =>
@@ -246,41 +245,25 @@ namespace MemoryBlackHole.Views
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
-        // v3.0.3 重打(问题1): 无边框透明窗口(WPF 默认最大化会铺满整屏盖住任务栏,本弹窗 ResizeBorderThickness=0,
-        // 没有负 Margin 可抵消,导致右边/底部留边)。统一方案:
-        //   1. 最大化时手动把 Left/Top/Width/Height 设成 SystemParameters.WorkArea(真实可用区域,不遮挡任务栏);
-        //   2. 根 Border 负 Margin 抵消各自真实的 WindowChrome.ResizeBorderThickness(此处=0,边界已铺满);
-        //   3. Normal 时还原 Margin=0,并用 WPF 原生 RestoreBounds 还原窗口位置尺寸。
-        // 与主窗口/查看弹窗行为一致,不再使用「减固定像素」。
+        // v3.0.3 重打(问题1): 无边框窗口最大化的标准做法,与主窗口/查看弹窗完全一致:
+        //   - WM_GETMINMAXINFO 钩子(NativeWindow)按"窗口当前所在显示器工作区"接管最大化尺寸与位置;
+        //   - StateChanged 切换 WindowChrome.ResizeBorderThickness(最大化=0 消除内容区内缩,Normal 还原);
+        //   - 不再用负 Margin / 手动设 Left/Top/Width/Height / MaxWidth/MaxHeight / RestoreBounds。
+        private void AddItemDialog_SourceInitialized(object? sender, EventArgs e)
+        {
+            _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            _hwndSource?.AddHook(NativeWindow.WndProc);
+        }
+
+        private void AddItemDialog_Closed(object? sender, EventArgs e)
+        {
+            _hwndSource?.RemoveHook(NativeWindow.WndProc);
+            _hwndSource = null;
+        }
+
         private void Window_StateChanged(object? sender, EventArgs e)
         {
-            if (WindowFrame == null || _syncMaximize) return;
-
-            if (WindowState == WindowState.Maximized)
-            {
-                var workArea = SystemParameters.WorkArea;
-                _syncMaximize = true;
-                Left = workArea.Left;
-                Top = workArea.Top;
-                Width = workArea.Width;
-                Height = workArea.Height;
-                _syncMaximize = false;
-                WindowFrame.Margin = new Thickness(-_resizeBorder);
-            }
-            else
-            {
-                WindowFrame.Margin = new Thickness(0);
-                var rb = RestoreBounds;
-                if (rb.Width > 0 && rb.Height > 0)
-                {
-                    _syncMaximize = true;
-                    Left = rb.Left;
-                    Top = rb.Top;
-                    Width = rb.Width;
-                    Height = rb.Height;
-                    _syncMaximize = false;
-                }
-            }
+            NativeWindow.ApplyMaximizeState(this, _resizeBorder);
         }
     }
 }

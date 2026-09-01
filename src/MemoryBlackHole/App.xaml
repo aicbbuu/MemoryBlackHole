@@ -5,12 +5,12 @@
     <Application.Resources>
         <ResourceDictionary>
             <!-- 记忆黑洞自定义配色（纯 WPF，不依赖 MaterialDesign）-->
-            <Color x:Key="BgColor">#0F1115</Color>
-            <Color x:Key="CardColor">#1B1E27</Color>
-            <Color x:Key="SideColor">#181B23</Color>
+            <Color x:Key="BgColor">#1B1F27</Color>
+            <Color x:Key="CardColor">#272D3A</Color>
+            <Color x:Key="SideColor">#242936</Color>
             <Color x:Key="AccentColor">#7C4DFF</Color>
             <Color x:Key="TextColor">#E6E6E6</Color>
-            <Color x:Key="DimColor">#6B7078</Color>
+            <Color x:Key="DimColor">#7E8496</Color>
             <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}" />
             <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
             <SolidColorBrush x:Key="SideBrush" Color="{StaticResource SideColor}" />
@@ -22,9 +22,9 @@
             <sys:Double x:Key="AppFontSize">14</sys:Double>
 
             <Style TargetType="TextBox">
-                <Setter Property="Background" Value="#171D30"/>
+                <Setter Property="Background" Value="#232B3E"/>
                 <Setter Property="Foreground" Value="#EEF1FF"/>
-                <Setter Property="BorderBrush" Value="#303B59"/>
+                <Setter Property="BorderBrush" Value="#414D70"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="Padding" Value="10,8"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -52,9 +52,9 @@
             </Style>
 
             <Style TargetType="PasswordBox">
-                <Setter Property="Background" Value="#171D30"/>
+                <Setter Property="Background" Value="#232B3E"/>
                 <Setter Property="Foreground" Value="#EEF1FF"/>
-                <Setter Property="BorderBrush" Value="#303B59"/>
+                <Setter Property="BorderBrush" Value="#414D70"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="Padding" Value="10,8"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -83,22 +83,22 @@
 
             <!-- 全局暗色滚动条样式 -->
             <Style TargetType="ScrollBar">
-                <Setter Property="Background" Value="#171D30"/>
-                <Setter Property="Foreground" Value="#2A3360"/>
+                <Setter Property="Background" Value="#232B3E"/>
+                <Setter Property="Foreground" Value="#3D4A78"/>
                 <Setter Property="Width" Value="8"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ScrollBar">
-                            <Grid Background="#171D30">
+                            <Grid Background="#232B3E">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <Track x:Name="PART_Track" Grid.Row="0">
                                     <Track.Thumb>
-                                        <Thumb Background="#2A3360" BorderThickness="0">
+                                        <Thumb Background="#3D4A78" BorderThickness="0">
                                             <Thumb.Template>
                                                 <ControlTemplate TargetType="Thumb">
-                                                    <Border Background="#2A3360" CornerRadius="4" Width="6" Height="Auto"/>
+                                                    <Border Background="#3D4A78" CornerRadius="4" Width="6" Height="Auto"/>
                                                 </ControlTemplate>
                                             </Thumb.Template>
                                         </Thumb>
@@ -112,7 +112,7 @@
 
             <Style TargetType="ScrollViewer">
                 <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="Foreground" Value="#2A3360"/>
+                <Setter Property="Foreground" Value="#3D4A78"/>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

@@ -19,7 +19,7 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border Background="#11182A" BorderBrush="#394766" BorderThickness="1" CornerRadius="16" Padding="24">
+    <Border Background="#1F2638" BorderBrush="#4E5D8A" BorderThickness="1" CornerRadius="16" Padding="24">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -27,10 +27,10 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
             <TextBlock x:Name="TitleText" Text="记忆黑洞" FontSize="19" Foreground="White" FontWeight="SemiBold"/>
-            <TextBlock x:Name="MessageText" Grid.Row="1" TextWrapping="Wrap" Foreground="#B8C1D8" FontSize="13" Margin="0,12,0,16"/>
+            <TextBlock x:Name="MessageText" Grid.Row="1" TextWrapping="Wrap" Foreground="#C3CBDF" FontSize="13" Margin="0,12,0,16"/>
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="CancelButton" Content="取消" Width="80" Margin="0,0,10,0" Click="Cancel_Click"
-                        Background="Transparent" Foreground="#C5CBE0" BorderBrush="#34405D" BorderThickness="1" Padding="10,7"/>
+                        Background="Transparent" Foreground="#CED5E7" BorderBrush="#485574" BorderThickness="1" Padding="10,7"/>
                 <Button x:Name="ConfirmButton" Content="确定" Width="80" Click="Confirm_Click"
                         Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,7"/>
             </StackPanel>
