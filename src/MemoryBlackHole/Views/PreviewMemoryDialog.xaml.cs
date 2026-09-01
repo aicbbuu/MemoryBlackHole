@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
+using System.Windows.Shell;
 using MemoryBlackHole.Models;
 using MemoryBlackHole.Services;
 
@@ -20,9 +21,20 @@ namespace MemoryBlackHole.Views
         public bool EditRequested { get; private set; }
         public bool DeleteRequested { get; private set; }
 
+        // v3.0.3 重打(问题1): 最大化时按 WindowChrome.ResizeBorderThickness 负 Margin 补偿,铺满工作区不露边。
+        private readonly double _resizeBorder;
+        // 重入保护:StateChanged 里改 Left/Top/Width/Height 不会再次触发 StateChanged,这里做防御。
+        private bool _syncMaximize;
+
         public PreviewMemoryDialog(MemoryItem item, DataService? service = null)
         {
             InitializeComponent();
+            _resizeBorder = WindowChrome.GetWindowChrome(this)?.ResizeBorderThickness.Left ?? 0;
+            StateChanged += Window_StateChanged;
+            // v3.0.3 重打(问题1): 普通状态也将窗口限制在屏幕真实可用区域内,避免被拖出屏幕/超屏放大(不再减固定像素)。
+            var workArea = SystemParameters.WorkArea;
+            MaxWidth = workArea.Width;
+            MaxHeight = workArea.Height;
             _item = item;
             _service = service;
             TitleText.Text = string.IsNullOrWhiteSpace(item.Title) ? item.DisplayText : item.Title;
@@ -44,12 +56,41 @@ namespace MemoryBlackHole.Views
             Closed += (_, _) => CleanupTemp();
         }
 
-        // v3.0.3 重打: 不依赖 WorkArea(Win11 任务栏自隐藏时含整屏),用 PrimaryScreen 直接拿主屏分辨率
-        // 弹窗减 13 像素(DWM 非客户区 7-8px + WPF 内部额外边距 + 1 像素余量)
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        // v3.0.3 重打(问题1): 无边框透明窗口(WPF 默认最大化会铺满整屏盖住任务栏,本弹窗 ResizeBorderThickness=0,
+        // 没有负 Margin 可抵消,导致右边/底部留边)。统一方案:
+        //   1. 最大化时手动把 Left/Top/Width/Height 设成 SystemParameters.WorkArea(真实可用区域,不遮挡任务栏);
+        //   2. 根 Border 负 Margin 抵消各自真实的 WindowChrome.ResizeBorderThickness(此处=0,边界已铺满);
+        //   3. Normal 时还原 Margin=0,并用 WPF 原生 RestoreBounds 还原窗口位置尺寸。
+        // 与主窗口/新增弹窗行为一致,不再使用「减固定像素」。
+        private void Window_StateChanged(object? sender, EventArgs e)
         {
-            MaxWidth = SystemParameters.PrimaryScreenWidth - 13;
-            MaxHeight = SystemParameters.PrimaryScreenHeight - 13;
+            if (WindowFrame == null || _syncMaximize) return;
+
+            if (WindowState == WindowState.Maximized)
+            {
+                var workArea = SystemParameters.WorkArea;
+                _syncMaximize = true;
+                Left = workArea.Left;
+                Top = workArea.Top;
+                Width = workArea.Width;
+                Height = workArea.Height;
+                _syncMaximize = false;
+                WindowFrame.Margin = new Thickness(-_resizeBorder);
+            }
+            else
+            {
+                WindowFrame.Margin = new Thickness(0);
+                var rb = RestoreBounds;
+                if (rb.Width > 0 && rb.Height > 0)
+                {
+                    _syncMaximize = true;
+                    Left = rb.Left;
+                    Top = rb.Top;
+                    Width = rb.Width;
+                    Height = rb.Height;
+                    _syncMaximize = false;
+                }
+            }
         }
 
         private void ShowContent()

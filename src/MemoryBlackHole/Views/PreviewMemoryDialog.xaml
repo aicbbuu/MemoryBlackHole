@@ -5,13 +5,12 @@
         Title="查看记忆" Width="650" Height="520" WindowStartupLocation="CenterOwner"
         WindowStyle="None" ResizeMode="CanResize" ShowInTaskbar="False"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
-        Opacity="0.80"
-        Loaded="Window_Loaded">
+        Opacity="0.80">
     <shell:WindowChrome.WindowChrome>
-        <!-- v3.0.3 重打: ResizeBorderThickness 改 0(用户失去边缘拖拽改大小,只能拖标题栏/最大化);
-             CornerRadius=10 让 Window 本身有系统圆角,配合外层 Border 圆角完整显示 -->
+        <!-- v3.0.3 重打(问题2): CornerRadius 与外层 Border CornerRadius=12 保持一致,四角圆角才完整;
+             ResizeBorderThickness 改 0(用户失去边缘拖拽改大小,只能拖标题栏/最大化) -->
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0"
-                            GlassFrameThickness="0" CornerRadius="10"
+                            GlassFrameThickness="0" CornerRadius="12"
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
@@ -53,27 +52,30 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <!-- v3.0.3 重打: 外层 Border CornerRadius 从 16 改 12(配合 WindowChrome 圆角显示,不被 ResizeBorderThickness 6 像素吃掉) -->
-    <Border BorderBrush="#303B59" BorderThickness="1" CornerRadius="12" Background="#E50F1424">
+    <!-- v3.0.3 重打(问题2): 外层 Border CornerRadius=12 与 WindowChrome.CornerRadius 一致;
+         x:Name="WindowFrame" 供 StateChanged 最大化时负 Margin 补偿铺满工作区 -->
+    <Border x:Name="WindowFrame" BorderBrush="#303B59" BorderThickness="1" CornerRadius="12" Background="#E50F1424">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="42"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <!-- v3.0.3: 自定义标题栏(WindowStyle=None 必需),支持拖动 + 最小化/最大化/关闭 -->
-            <Grid Grid.Row="0" Background="#0C101D" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="查看记忆" FontSize="13" FontWeight="SemiBold"
-                           Foreground="#F5F7FF" VerticalAlignment="Center" Margin="18,0,0,0"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,6,0">
-                    <Button Content="—" Style="{StaticResource DialogWindowButton}" Click="Minimize_Click"/>
-                    <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource DialogWindowButton}" Click="Maximize_Click"/>
-                    <Button Content="×" Style="{StaticResource DialogWindowButton}" Click="Close_Click"/>
-                </StackPanel>
-            </Grid>
+            <!-- v3.0.3(问题2): 标题栏背景用带顶部左右圆角的 Border,不再以实心矩形盖住外层 Border 的顶部圆角 -->
+            <Border Grid.Row="0" Background="#0C101D" CornerRadius="12,12,0,0" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="查看记忆" FontSize="13" FontWeight="SemiBold"
+                               Foreground="#F5F7FF" VerticalAlignment="Center" Margin="18,0,0,0"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,6,0">
+                        <Button Content="—" Style="{StaticResource DialogWindowButton}" Click="Minimize_Click"/>
+                        <Button x:Name="MaximizeButton" Content="□" Style="{StaticResource DialogWindowButton}" Click="Maximize_Click"/>
+                        <Button Content="×" Style="{StaticResource DialogWindowButton}" Click="Close_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
             <Border Grid.Row="1" Padding="26">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

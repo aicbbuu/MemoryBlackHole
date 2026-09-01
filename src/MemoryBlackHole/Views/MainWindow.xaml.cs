@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Shell;
 using System.Windows.Threading;
 using MemoryBlackHole.Models;
 using MemoryBlackHole.Services;
@@ -36,6 +37,11 @@ namespace MemoryBlackHole.Views
         private static readonly Brush _tagScopeBrush    = CreateFrozenBrush(Color.FromRgb(0xFF, 0xB0, 0x60));
         // v3.0.9: WindowFrame Clip 缓存 — resize 时只改 Rect,不 new RectangleGeometry
         private RectangleGeometry? _windowFrameClip;
+        // v3.0.3 重打(问题1): 无边框透明窗口最大化时,系统按 WindowChrome.ResizeBorderThickness 在四周留透明边;
+        // 记录该值,在 StateChanged 里用外层根 Border 的负 Margin 抵消,让内容真正铺满工作区。
+        private readonly double _resizeBorder;
+        // 重入保护:StateChanged 里改 Left/Top/Width/Height 不会再次触发 StateChanged,这里做防御。
+        private bool _syncMaximize;
         private static Brush CreateFrozenBrush(Color c)
         {
             var b = new SolidColorBrush(c);
@@ -46,6 +52,12 @@ namespace MemoryBlackHole.Views
 public MainWindow()
         {
             InitializeComponent();
+            _resizeBorder = WindowChrome.GetWindowChrome(this)?.ResizeBorderThickness.Left ?? 0;
+            StateChanged += Window_StateChanged;
+            // v3.0.3 重打(问题1): 普通状态也将窗口限制在屏幕真实可用区域内,避免被拖出屏幕/超屏放大(不再减固定像素)。
+            var workArea = SystemParameters.WorkArea;
+            MaxWidth = workArea.Width;
+            MaxHeight = workArea.Height;
             _frontSpace = new SpaceCore(FrontCanvas, warm: true);
             _backSpace = new SpaceCore(BackCanvas, warm: false);
             _lastFrame = DateTime.UtcNow;
@@ -71,14 +83,6 @@ Loaded += (_, _) =>
                 var ver = Assembly.GetExecutingAssembly().GetName().Version;
                 if (ver != null)
                     VersionText.Text = $"v{ver.Major}.{ver.Minor}.{ver.Build}";
-                // v3.0.3 重打: 不依赖 WorkArea(Win11 任务栏自隐藏时含整屏),用 PrimaryScreen 直接拿主屏分辨率
-                // WindowChrome.ResizeBorderThickness=6 + WPF 内部额外边距 + DWM 7-8px 非客户区
-                // + 1 像素余量 → 主窗口减 17 像素才能贴满
-                MaxWidth = SystemParameters.PrimaryScreenWidth - 17;
-                MaxHeight = SystemParameters.PrimaryScreenHeight - 17;
-                // v3.0.3 重打: BackFace(探索页)同样补一次(避免探索页最大化时右边/底部露边)
-                BackFace.MaxWidth = SystemParameters.PrimaryScreenWidth - 17;
-                BackFace.MaxHeight = SystemParameters.PrimaryScreenHeight - 17;
                 // 默认加载全部记忆(进入探索页即看到列表)
                 UpdateSearchScope();
                 DoSearch();
@@ -104,6 +108,47 @@ Loaded += (_, _) =>
             if (sender is not System.Windows.Controls.ScrollViewer sv) return;
             sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta);
             e.Handled = true;
+        }
+
+        /// <summary>
+        /// v3.0.3 重打(问题1): 无边框透明窗口(WPF 默认最大化会铺满整屏盖住任务栏,弹窗 ResizeBorderThickness=0 时
+        /// 没有负 Margin 可抵消,导致右边/底部留边)。统一方案:
+        ///   1. 最大化时手动把 Left/Top/Width/Height 设成 SystemParameters.WorkArea(真实可用区域,不遮挡任务栏);
+        ///   2. 根 Border 负 Margin 抵消各自真实的 WindowChrome.ResizeBorderThickness(主窗=6,弹窗=0),内容铺满工作区;
+        ///   3. Normal 时还原 Margin=0,并用 WPF 原生 RestoreBounds 还原窗口位置尺寸。
+        /// 三个窗口行为一致,不再使用「减固定像素」。
+        /// </summary>
+        private void Window_StateChanged(object? sender, EventArgs e)
+        {
+            if (WindowFrame == null || _syncMaximize) return;
+
+            if (WindowState == WindowState.Maximized)
+            {
+                var workArea = SystemParameters.WorkArea;
+                // MaxWidth/MaxHeight 已在构造时按 WorkArea 设好(WPF 原生最大化无法超出,避免盖任务栏、避免回摆)。
+                _syncMaximize = true;
+                Left = workArea.Left;
+                Top = workArea.Top;
+                Width = workArea.Width;
+                Height = workArea.Height;
+                _syncMaximize = false;
+                // 抵消 WindowChrome.ResizeBorderThickness 在四周留的透明边(弹窗=0 时为无操作,边界已铺满)。
+                WindowFrame.Margin = new Thickness(-_resizeBorder);
+            }
+            else
+            {
+                WindowFrame.Margin = new Thickness(0);
+                var rb = RestoreBounds;
+                if (rb.Width > 0 && rb.Height > 0)
+                {
+                    _syncMaximize = true;
+                    Left = rb.Left;
+                    Top = rb.Top;
+                    Width = rb.Width;
+                    Height = rb.Height;
+                    _syncMaximize = false;
+                }
+            }
         }
 
         private void WindowFrame_SizeChanged(object sender, SizeChangedEventArgs e)

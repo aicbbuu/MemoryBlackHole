@@ -148,18 +148,25 @@
                                    Visibility="{Binding ThumbnailImageVisibility}"/>
                         </Grid>
                     </Border>
-                    <StackPanel Grid.Column="1" Margin="12,0,16,0">
-                        <!-- v3.0.3 重打: 主行用 ContentOrFileName Converter 区分: Text/Link → Content,其它类型 → OriginalFileName;
-                             不再固定截 10 字,由 TextTrimming="CharacterEllipsis" + TextWrapping="NoWrap" 自适应宽度截断;
-                             加 MaxWidth=320 + HorizontalAlignment=Stretch 触发 TextTrimming(父 Grid * 列默认填满,TextBlock 实际宽无限,不加 MaxWidth 不触发) -->
+                    <Grid Grid.Column="1" Margin="12,0,16,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <!-- v3.0.3 重打(问题3): 主行用 ContentOrFileName Converter 区分:
+                              Text/Link → Content(Converter 已规范化,单行),其它类型 → OriginalFileName。
+                              父容器由 StackPanel(给子元素无限测量宽)改为 Grid(* 列有限宽),
+                              TextBlock HorizontalAlignment=Stretch 即可真正跟随可用列宽,触发
+                              TextTrimming=CharacterEllipsis 让超出部分以 … 结尾(去掉写死的 MaxWidth=320)。 -->
                         <TextBlock Text="{Binding Converter={StaticResource ContentOrFileName}}" FontSize="15" FontWeight="SemiBold" Foreground="#F4F6FF"
                                    TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                                   MaxWidth="320" HorizontalAlignment="Stretch"
+                                   HorizontalAlignment="Stretch"
                                    ToolTip="{Binding DisplayText}"/>
-                        <TextBlock Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
+                        <TextBlock Grid.Row="1" Text="{Binding Tags}" FontSize="12" Foreground="#9D8BFF"
                                    TextWrapping="Wrap" MaxHeight="20" Margin="0,4,0,0"/>
-                        <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,6,0,0"/>
-                    </StackPanel>
+                        <TextBlock Grid.Row="2" Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11" Foreground="#68748F" Margin="0,6,0,0"/>
+                    </Grid>
                 </Grid>
             </Border>
         </DataTemplate>
