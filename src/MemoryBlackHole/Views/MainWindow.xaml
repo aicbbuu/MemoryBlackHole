@@ -4,7 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:models="clr-namespace:MemoryBlackHole.Models"
         xmlns:converters="clr-namespace:MemoryBlackHole.Converters"
-        Title="记忆黑洞" Width="950" Height="500" MinWidth="360" MinHeight="280"
+        Title="记忆黑洞" Width="1000" Height="550" MinWidth="360" MinHeight="280"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
         AllowsTransparency="True" Background="Transparent" Foreground="#E9ECF5"
         AllowDrop="True" Drop="Window_Drop"
@@ -265,7 +265,7 @@
                 </Grid.Resources>
                 <Button x:Name="MusicToggle" Style="{StaticResource CircleIconButton}" Click="MusicToggle_Click"
                         ToolTip="背景音乐">
-                    <TextBlock Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A5B0C8"/>
+                    <TextBlock Text="🎵" FontSize="16" Foreground="#A5B0C8"/>
                 </Button>
                 <Border x:Name="MusicPanel" Visibility="Collapsed" Background="#B0171D2A" CornerRadius="12"
                         Padding="12" Width="300" Cursor="Arrow">

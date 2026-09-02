@@ -141,7 +141,7 @@ namespace MemoryBlackHole.Models
                 {
                     "File" => "文件",
                     "Image" => "图片",
-                    "Audio" => "语音",
+                    "Audio" => "音频",
                     "Video" => "视频",
                     _ => "文本"
                 };
