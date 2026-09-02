@@ -60,6 +60,8 @@ namespace MemoryBlackHole.Views
         private string? _musicCurTemp;            // 当前曲目临时文件(用于回退/关闭时清理)
         private string? _musicTempToDelete;       // 上一首临时文件,等新曲 Open 完成后删除
         private int _musicConsFailures;           // 连续不可播计数,防止整列表都坏时无限切歌
+        private bool _suppressMusicSelection;     // 程序设置 SelectedIndex 时抑制 SelectionChanged,避免重复触发
+        private bool _musicListOpen;              // 播放列表是否展开
         private readonly DispatcherTimer _musicPollTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
 
         private static Brush CreateFrozenBrush(Color c)
@@ -711,11 +713,70 @@ Loaded += (_, _) =>
             if (expand)
             {
                 BuildMusicQueue();
+                RefreshMusicList();
                 if (_musicItems != null && _musicItems.Count > 0)
                     MusicTitle.Text = _musicTitleForIndex(_musicIndex);
                 else
                     MusicTitle.Text = "暂无背景音乐";
             }
+            else
+            {
+                _musicListOpen = false;
+                MusicList.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>点曲名(▾)展开/收起播放列表;展开时刷新列表并高亮当前项。</summary>
+        private void MusicTitleButton_Click(object sender, MouseButtonEventArgs e)
+        {
+            _musicListOpen = MusicList.Visibility != Visibility.Visible;
+            if (_musicListOpen)
+            {
+                BuildMusicQueue();
+                RefreshMusicList();
+                MusicList.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                MusicList.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>把播放列表数据源设为音频记忆,并高亮当前曲目。</summary>
+        private void RefreshMusicList()
+        {
+            if (_musicItems == null)
+            {
+                MusicList.ItemsSource = null;
+                return;
+            }
+            _suppressMusicSelection = true;
+            MusicList.ItemsSource = _musicItems;   // 绑定 MemoryItem,DataTemplate 显示 DisplayText
+            MusicList.SelectedIndex = _musicIndex >= 0 ? _musicIndex : -1;
+            _suppressMusicSelection = false;
+            // 当前项不可见时滚到可见(高亮跟随播放进度切换)
+            if (_musicIndex >= 0 && _musicIndex < MusicList.Items.Count)
+                MusicList.ScrollIntoView(MusicList.Items[_musicIndex]);
+        }
+
+        /// <summary>点击列表某首 → 收起列表并直接切过去播。</summary>
+        private void MusicList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressMusicSelection) return;
+            if (MusicList.SelectedIndex < 0 || _musicItems == null) return;
+            int idx = MusicList.SelectedIndex;
+            MusicList.Visibility = Visibility.Collapsed;
+            _musicListOpen = false;
+            _ = PlaySpecificAsync(idx);
+        }
+
+        private async Task PlaySpecificAsync(int idx)
+        {
+            BuildMusicQueue();
+            if (_musicItems == null || idx < 0 || idx >= _musicItems.Count) return;
+            _musicIndex = idx;
+            _musicReady = false;
+            await LoadTrackAndPlayAsync(idx);
         }
 
         /// <summary>懒加载音频记忆列表(仅元数据,Search 走索引;真正提取 BLOB 到文件在播放时才后台做)。</summary>
@@ -742,7 +803,7 @@ Loaded += (_, _) =>
             {
                 _musicPlayer?.Pause();
                 _musicPlaying = false;
-                MusicPlayPause.Content = "▶";
+                MusicPlayPauseIcon.Text = "\uE768";
                 return;
             }
             // 播放:若无当前曲先定位;若已加载(暂停后恢复)直接 Play,否则加载并播放
@@ -752,7 +813,7 @@ Loaded += (_, _) =>
 
         private async Task PlayMusicAsync(bool resume)
         {
-            if (resume) { _musicPlayer!.Play(); _musicPlaying = true; MusicPlayPause.Content = "⏸"; return; }
+            if (resume) { _musicPlayer!.Play(); _musicPlaying = true; MusicPlayPauseIcon.Text = "\uE769"; return; }
             await LoadTrackAndPlayAsync(_musicIndex);
         }
 
@@ -798,7 +859,7 @@ Loaded += (_, _) =>
                 {
                     _musicConsFailures = 0;
                     _musicPlaying = false;
-                    MusicPlayPause.Content = "▶";
+                    MusicPlayPauseIcon.Text = "\uE768";
                     return;
                 }
                 NextMusicIndex(1);
@@ -827,7 +888,7 @@ Loaded += (_, _) =>
             player.Open(ToMediaUri(path));
             player.Play();
             _musicPlaying = true;
-            MusicPlayPause.Content = "⏸";
+            MusicPlayPauseIcon.Text = "\uE769";
             if (!_musicPollTimer.IsEnabled) _musicPollTimer.Start();
         }
 
@@ -883,8 +944,15 @@ Loaded += (_, _) =>
                 _musicDurationSeconds = 0;
                 MusicProgress.Maximum = 1;
             }
-            MusicPlayPause.Content = _musicPlaying ? "⏸" : "▶";
+            MusicPlayPauseIcon.Text = _musicPlaying ? "\uE769" : "\uE768";
             MusicTime.Text = FormatMusicTime(_musicPlayer.Position.TotalSeconds, _musicDurationSeconds);
+            // 列表仍展开时,跟随切歌同步高亮当前项
+            if (_musicListOpen && MusicList.Items.Count > 0)
+            {
+                _suppressMusicSelection = true;
+                MusicList.SelectedIndex = _musicIndex >= 0 ? _musicIndex : -1;
+                _suppressMusicSelection = false;
+            }
             // 上一首已切走且新曲 Open 完成 → 可安全删除其临时文件
             DeleteMusicTemp(_musicTempToDelete);
             _musicTempToDelete = null;
@@ -897,7 +965,7 @@ Loaded += (_, _) =>
             App.Log("背景音乐播放失败: " + e.ErrorException?.Message);
             _musicReady = false;
             _musicPlaying = false;
-            MusicPlayPause.Content = "▶";
+            MusicPlayPauseIcon.Text = "\uE768";
             _musicConsFailures++;
             if (_musicConsFailures < (_musicItems?.Count ?? 1))
                 _ = ChangeMusicAsync(1);   // 跳过不可播的,播放下一首(带计数上限防无限循环)

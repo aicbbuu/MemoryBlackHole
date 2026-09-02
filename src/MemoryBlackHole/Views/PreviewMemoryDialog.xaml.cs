@@ -225,7 +225,7 @@ namespace MemoryBlackHole.Views
             ProgressSlider.Maximum = 1;
             ProgressSlider.IsEnabled = true;
             TimeText.Text = "00:00 / 00:00";
-            PlayPauseButton.Content = "⏸";
+            PlayPauseButton.Content = "\uE769";
         }
 
         /// <summary>每 ~400ms 轮询一次播放位置;仅播放且未拖动时更新进度条,防止拖动回弹。</summary>
@@ -249,7 +249,7 @@ namespace MemoryBlackHole.Views
             {
                 _mediaPlayer.Pause();
                 _isPlaying = false;
-                PlayPauseButton.Content = "▶";
+                PlayPauseButton.Content = "\uE768";
             }
             else
             {
@@ -260,7 +260,7 @@ namespace MemoryBlackHole.Views
                     _mediaPlayer.Position = TimeSpan.Zero;
                 _mediaPlayer.Play();
                 _isPlaying = true;
-                PlayPauseButton.Content = "⏸";
+                PlayPauseButton.Content = "\uE769";
             }
         }
 
@@ -315,7 +315,7 @@ namespace MemoryBlackHole.Views
                 ProgressSlider.Maximum = 1;
                 ProgressSlider.IsEnabled = false;
             }
-            PlayPauseButton.Content = _isPlaying ? "⏸" : "▶";
+            PlayPauseButton.Content = _isPlaying ? "\uE769" : "\uE768";
             TimeText.Text = FormatTime(_mediaPlayer.Position.TotalSeconds, _mediaDurationSeconds);
             // v3.1.2: 拿到视频自然尺寸后,更新 VideoDrawing 的 Rect 与 brush Viewbox,确保等比缩放不变形。
             if (_item.Type == "Video" && _videoDrawing != null && _videoBrush != null)
@@ -330,7 +330,7 @@ namespace MemoryBlackHole.Views
         private void MediaPlayer_MediaEnded(object? sender, EventArgs e)
         {
             _isPlaying = false;
-            PlayPauseButton.Content = "▶";
+            PlayPauseButton.Content = "\uE768";
             if (_mediaDurationSeconds > 0)
                 TimeText.Text = FormatTime(_mediaDurationSeconds, _mediaDurationSeconds);
         }

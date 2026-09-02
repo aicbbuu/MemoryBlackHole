@@ -238,32 +238,92 @@
                 </Button>
             </StackPanel>
 
-            <!-- v3.1.2 左下角背景音乐播放器:默认折叠成小圆钮(🎵),点击展开为紧凑控制面板 -->
+            <!-- v3.1.2/3 左下角背景音乐播放器:默认折叠成小圆钮(音符),点击展开为紧凑控制面板,点曲名展开播放列表 -->
             <Grid x:Name="MusicPlayer" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="26,0,0,26">
-                <Button x:Name="MusicToggle" Content="🎵" Style="{StaticResource CircleIconButton}"
-                        Click="MusicToggle_Click" ToolTip="背景音乐"/>
-                <Border x:Name="MusicPanel" Visibility="Collapsed" Background="#A6171D2A" CornerRadius="12"
-                        Padding="10" Width="290" Cursor="Arrow">
+                <Grid.Resources>
+                    <Style x:Key="MusicGhostButton" TargetType="Button">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Foreground" Value="#97A1BB"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="B" Background="{TemplateBinding Background}" CornerRadius="6">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="B" Property="Background" Value="#2B3550"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Grid.Resources>
+                <Button x:Name="MusicToggle" Style="{StaticResource CircleIconButton}" Click="MusicToggle_Click"
+                        ToolTip="背景音乐">
+                    <TextBlock Text="&#xE916;" FontFamily="Segoe MDL2 Assets" FontSize="16" Foreground="#A5B0C8"/>
+                </Button>
+                <Border x:Name="MusicPanel" Visibility="Collapsed" Background="#B0171D2A" CornerRadius="12"
+                        Padding="12" Width="300" Cursor="Arrow">
                     <StackPanel>
+                        <!-- 标题行:点曲名展开/收起播放列表 -->
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="MusicTitle" Text="背景音乐" Foreground="#CED5E7" FontSize="12"
-                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="2,0,8,0"/>
+                            <StackPanel Orientation="Horizontal" Cursor="Hand" MouseLeftButtonUp="MusicTitleButton_Click">
+                                <TextBlock x:Name="MusicTitle" Text="背景音乐" Foreground="#E9ECF5" FontSize="13"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="200" VerticalAlignment="Center"/>
+                                <TextBlock Text="▾" Foreground="#9D8BFF" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
                             <Button Grid.Column="1" Content="—" Width="26" Height="24" Click="MusicToggle_Click"
-                                    Background="Transparent" Foreground="#97A1BB" BorderThickness="0" FontSize="13" Padding="0"/>
+                                    Style="{StaticResource MusicGhostButton}"/>
                         </Grid>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,2">
-                            <Button x:Name="MusicPrevButton" Content="⏮" Style="{StaticResource CircleIconButton}"
-                                    Click="MusicPrev_Click" ToolTip="上一首"/>
-                            <Button x:Name="MusicPlayPause" Content="▶" Style="{StaticResource CircleIconButton}"
-                                    Margin="8,0,8,0" Click="MusicPlayPause_Click" ToolTip="播放/暂停"/>
-                            <Button x:Name="MusicNextButton" Content="⏭" Style="{StaticResource CircleIconButton}"
-                                    Click="MusicNext_Click" ToolTip="下一首"/>
+                        <!-- 播放列表(点曲名展开;当前项高亮,点击切歌) -->
+                        <ListBox x:Name="MusicList" Visibility="Collapsed" Margin="0,6,0,0" MaxHeight="160"
+                                 Background="#E0232B3E" BorderBrush="#414D70" BorderThickness="1"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 SelectionChanged="MusicList_SelectionChanged" Foreground="#CED5E7" FontSize="12">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="8,5"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="#6D5DF7"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <!-- 播放控制:上一首 / 播放·暂停(突出) / 下一首 -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,2">
+                            <Button x:Name="MusicPrevButton" Style="{StaticResource CircleIconButton}" Click="MusicPrev_Click" ToolTip="上一首">
+                                <TextBlock Text="&#xE892;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#C4CCE0"/>
+                            </Button>
+                            <Button x:Name="MusicPlayPause" Style="{StaticResource CircleIconButton}" Width="46" Height="46"
+                                    Margin="10,0,10,0" Click="MusicPlayPause_Click" Background="#6D5DF7" ToolTip="播放/暂停">
+                                <TextBlock x:Name="MusicPlayPauseIcon" Text="&#xE768;" FontFamily="Segoe MDL2 Assets"
+                                           FontSize="16" Foreground="White"/>
+                            </Button>
+                            <Button x:Name="MusicNextButton" Style="{StaticResource CircleIconButton}" Click="MusicNext_Click" ToolTip="下一首">
+                                <TextBlock Text="&#xE893;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#C4CCE0"/>
+                            </Button>
                         </StackPanel>
-                        <Grid Margin="0,6,0,0">
+                        <!-- 进度条 + 时间 -->
+                        <Grid Margin="0,12,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -275,12 +335,14 @@
                             <TextBlock x:Name="MusicTime" Grid.Column="1" Text="00:00 / 00:00" Foreground="#A5B0C8"
                                        FontSize="10" Margin="8,0,2,0" VerticalAlignment="Center"/>
                         </Grid>
-                        <Grid Margin="0,4,0,0">
+                        <!-- 音量 -->
+                        <Grid Margin="0,8,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="🔊" Foreground="#A5B0C8" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE767;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#A5B0C8"
+                                       Margin="0,0,8,0" VerticalAlignment="Center"/>
                             <Slider x:Name="MusicVolume" Grid.Column="1" Minimum="0" Maximum="100" Value="50"
                                     ValueChanged="MusicVolume_ValueChanged" ToolTip="音量"/>
                         </Grid>
