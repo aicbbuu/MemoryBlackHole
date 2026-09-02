@@ -118,8 +118,8 @@
                                         BorderThickness="0" FontSize="14" Padding="0"/>
                                 <Slider x:Name="ProgressSlider" Grid.Column="1" VerticalAlignment="Center" Margin="10,0"
                                         Minimum="0" Maximum="1" Value="0"
-                                        ThumbDragStarted="ProgressSlider_ThumbDragStarted"
-                                        ThumbDragCompleted="ProgressSlider_ThumbDragCompleted"
+                                        PreviewMouseLeftButtonDown="ProgressSlider_PreviewMouseLeftButtonDown"
+                                        PreviewMouseLeftButtonUp="ProgressSlider_PreviewMouseLeftButtonUp"
                                         ValueChanged="ProgressSlider_ValueChanged"/>
                                 <TextBlock x:Name="TimeText" Grid.Column="2" VerticalAlignment="Center" Foreground="#A5B0C8"
                                            FontSize="11" Margin="0,0,12,0" Text="00:00 / 00:00"/>

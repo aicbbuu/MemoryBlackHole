@@ -188,7 +188,9 @@ namespace MemoryBlackHole.Views
         private void PollMediaPosition()
         {
             if (!_mediaReady || _mediaDurationSeconds <= 0) return;
-            if (_isDraggingProgress) return;
+            // _isDraggingProgress = 用户按下鼠标(拖动/点轨道);IsMouseCaptureWithin = 缩略圈仍持有鼠标捕获(松手在外部也拦截),
+            // 两者任一成立都视为"用户正在操作进度条",暂停轮询避免把进度值拉回去。
+            if (_isDraggingProgress || ProgressSlider.IsMouseCaptureWithin) return;
             if (!MediaPreview.IsPlaying) return;
             double pos = Math.Clamp(MediaPreview.Position.TotalSeconds, 0, _mediaDurationSeconds);
             _seekFromTimer = true;
@@ -216,14 +218,17 @@ namespace MemoryBlackHole.Views
             }
         }
 
-        private void ProgressSlider_ThumbDragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+        // Slider 没有 ThumbDragStarted/ThumbDragCompleted(那是 Thumb 的事件);改用 Slider 支持的
+        // PreviewMouseLeftButtonDown/Up 标记"用户正在操作进度条",防止 PollMediaPosition 回弹。
+        private void ProgressSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _isDraggingProgress = true;
         }
 
-        private void ProgressSlider_ThumbDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        private void ProgressSlider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             _isDraggingProgress = false;
+            // 松手后真正跳转(拖动或点轨道都从这里定位)
             if (_mediaReady && _mediaDurationSeconds > 0)
                 MediaPreview.Position = TimeSpan.FromSeconds(Math.Clamp(ProgressSlider.Value, 0, _mediaDurationSeconds));
             TimeText.Text = FormatTime(ProgressSlider.Value, _mediaDurationSeconds);
