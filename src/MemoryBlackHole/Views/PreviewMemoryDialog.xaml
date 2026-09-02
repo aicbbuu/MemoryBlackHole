@@ -100,6 +100,36 @@
                         <Image x:Name="ImagePreview" Stretch="Uniform" Visibility="Collapsed"/>
                         <MediaElement x:Name="MediaPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
                                       Visibility="Collapsed" Stretch="Uniform"/>
+                        <!-- v3.1.0: 视频/音频播放控制条(仅媒体类型显示；文本/图片/链接/文件不显示)。
+                             播放/暂停、可拖动进度条、当前时间/总时长、音量;由轮询定时器实时推进。 -->
+                        <Border x:Name="MediaControls" Grid.Row="0" Visibility="Collapsed"
+                                VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="0,10,0,0"
+                                Background="#CC181D2A" CornerRadius="8" Padding="12,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="PlayPauseButton" Grid.Column="0" Content="⏸" Width="38" Height="30"
+                                        Click="PlayPause_Click" Background="#6D5DF7" Foreground="White"
+                                        BorderThickness="0" FontSize="14" Padding="0"/>
+                                <Slider x:Name="ProgressSlider" Grid.Column="1" VerticalAlignment="Center" Margin="10,0"
+                                        Minimum="0" Maximum="1" Value="0"
+                                        ThumbDragStarted="ProgressSlider_ThumbDragStarted"
+                                        ThumbDragCompleted="ProgressSlider_ThumbDragCompleted"
+                                        ValueChanged="ProgressSlider_ValueChanged"/>
+                                <TextBlock x:Name="TimeText" Grid.Column="2" VerticalAlignment="Center" Foreground="#A5B0C8"
+                                           FontSize="11" Margin="0,0,12,0" Text="00:00 / 00:00"/>
+                                <TextBlock Grid.Column="3" VerticalAlignment="Center" Foreground="#A5B0C8" FontSize="12"
+                                           Text="🔊" Margin="0,0,4,0"/>
+                                <Slider x:Name="VolumeSlider" Grid.Column="4" VerticalAlignment="Center" Width="90"
+                                        Minimum="0" Maximum="100" Value="50"
+                                        ValueChanged="VolumeSlider_ValueChanged" ToolTip="音量"/>
+                            </Grid>
+                        </Border>
                         <StackPanel x:Name="FileInfoPanel" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <TextBlock Text="这是一个文件记忆" FontSize="18" Foreground="White" HorizontalAlignment="Center"/>
                             <TextBlock x:Name="FileInfoText" Foreground="#A5B0C8" TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0"/>

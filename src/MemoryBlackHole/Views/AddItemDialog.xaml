@@ -118,7 +118,7 @@
                                  VerticalScrollBarVisibility="Auto" ToolTip="输入文本内容"/>
                         <StackPanel x:Name="FilePanel" Visibility="Collapsed"
                                     HorizontalAlignment="Stretch" VerticalAlignment="Top">
-                            <TextBlock Text="支持图片、视频、音频和其他文件。900MB 的文件分块流式存入本地 SQLite 数据库；超过阈值文件副本保存在 .memoryblackhole/files"
+                            <TextBlock Text="支持图片、视频、音频和其他文件。800MB 的文件分块流式存入本地 SQLite 数据库；超过阈值文件副本保存在 .memoryblackhole/files"
                                        Foreground="#B8C2D9" FontSize="12" LineHeight="20"
                                        TextWrapping="Wrap" TextAlignment="Left"
                                        HorizontalAlignment="Stretch" Margin="0,0,0,12"/>

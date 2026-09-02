@@ -10,7 +10,7 @@
 
 > 当前版本仅发布 `win-x64`。旧版同时编 `win-x86`，但 x86 进程用户地址空间仅 2~4 GB，
 > 写入几百 MB 以上的 BLOB 时 SQLite 事务容易触发 `SQLITE_NOMEM (error 7)`。
-> x64 进程地址空间充裕，代码可稳定存到 900MB（十进制）以内。阈值刻意小于 SQLite 默认 `SQLITE_MAX_LENGTH=1,000,000,000` 字节，以避开编译期 BLOB 上限。
+> x64 进程地址空间充裕，代码可稳定存到 800MB（十进制）以内。阈值刻意小于 SQLite 默认 `SQLITE_MAX_LENGTH=1,000,000,000` 字节，以避开编译期 BLOB 上限。
 
 ## Windows 环境准备
 
@@ -63,7 +63,7 @@ artifacts/installer/MemoryBlackHole-Setup-3.0.0-win-x64.exe
 
 ```text
 .memoryblackhole\memory.db
-.memoryblackhole\files\        （超过 900MB BLOB 阈值的文件副本存放目录）
+.memoryblackhole\files\        （超过 800MB BLOB 阈值的文件副本存放目录）
 .memoryblackhole\memory.db-wal / -shm  （WAL 模式日志）
 ```
 

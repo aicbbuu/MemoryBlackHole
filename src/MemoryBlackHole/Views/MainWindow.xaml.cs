@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -197,13 +198,23 @@ Loaded += (_, _) =>
             }
         }
 
+        // v3.1.0(性能): CompositionTarget.Rendering 每帧(随屏幕刷新率,高刷更高)触发。
+        // 原实现每帧同时更新 _frontSpace 与 _backSpace(两套各 100 颗粒子,共 200)。
+        // 优化:仅当窗口可见且非最小化时才渲染;且只更新"当前可见的面"——
+        //   FrontFace/BackFace 之一被 Collapsed 时 WPF 本就不渲染它,空转纯属白耗 CPU/GPU。
+        // 效果保持:可见面仍按原帧率驱动同一套动画;隐藏面因不可见,暂停更新无感。
         private void OnRendering(object? sender, EventArgs e)
         {
+            if (WindowState == WindowState.Minimized || !IsVisible) return;
+            bool frontVisible = FrontFace.Visibility == Visibility.Visible;
+            bool backVisible = BackFace.Visibility == Visibility.Visible;
+            if (!frontVisible && !backVisible) return;
+
             var now = DateTime.UtcNow;
             double delta = Math.Clamp((now - _lastFrame).TotalSeconds, 0, 0.05);
             _lastFrame = now;
-            _frontSpace.Update(delta);
-            _backSpace.Update(delta);
+            if (frontVisible) _frontSpace.Update(delta);
+            if (backVisible) _backSpace.Update(delta);
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -265,8 +276,10 @@ Loaded += (_, _) =>
                 if (!stillAdd) return;
             }
 
-            // v3.1.0: 缩略图依赖 WPF STA,必须在 UI 线程生成;文件复制/大 BLOB 写入放后台,避免界面冻结。
-            byte[]? thumb = item.Type == "Image" ? DataService.GenerateThumbnail(sourcePath, 100) : null;
+            // v3.1.0: 缩略图依赖 WPF imaging(VerticalImage/BitmapImage 需 STA),不能在 UI 线程解码大图(BitmapImage 解码
+            // + RenderTargetBitmap + PNG 编码会卡屏),也不能在 MTA 的线程池线程上跑(会抛)。改在专用后台 STA 线程生成,
+            // 结果(byte[])再回 UI 线程交给 AddFile。文件复制/大 BLOB 写入依旧走 Task.Run,避免界面冻结。
+            byte[]? thumb = item.Type == "Image" ? await GenerateThumbnailBackgroundAsync(sourcePath) : null;
 
             try
             {
@@ -285,6 +298,29 @@ Loaded += (_, _) =>
         {
             _busy = busy;
             Mouse.OverrideCursor = busy ? Cursors.Wait : null;
+        }
+
+        /// <summary>
+        /// v3.1.0(性能): 缩略图生成依赖 WPF 成像(需 STA 线程)。线程池线程是 MTA,直接 Task.Run 会抛;
+        /// 这里在专用后台 STA 线程上跑 DataService.GenerateThumbnail,字节数组返回给调用方,
+        /// 从而把大图解码+缩放+PNG 编码移出 UI 线程,避免添加大图记忆时界面冻结。
+        /// </summary>
+        private static Task<byte[]?> GenerateThumbnailBackgroundAsync(string path)
+        {
+            return Task.Run(() =>
+            {
+                byte[]? result = null;
+                var thread = new Thread(() =>
+                {
+                    try { result = DataService.GenerateThumbnail(path, 100); }
+                    catch { result = null; }
+                });
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.IsBackground = true;
+                thread.Start();
+                thread.Join();
+                return result;
+            });
         }
 
         /// <summary>v3.0.9: 字节数 → 友好字符串(B/KB/MB/GB)。</summary>

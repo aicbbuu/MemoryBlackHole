@@ -8,10 +8,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MemoryBlackHole</RootNamespace>
     <AssemblyName>MemoryBlackHole</AssemblyName>
-    <Version>3.1.0</Version>
-    <AssemblyVersion>3.1.0.0</AssemblyVersion>
-    <FileVersion>3.1.0.0</FileVersion>
-    <InformationalVersion>3.1.0</InformationalVersion>
+    <Version>3.1.1</Version>
+    <AssemblyVersion>3.1.1.0</AssemblyVersion>
+    <FileVersion>3.1.1.0</FileVersion>
+    <InformationalVersion>3.1.1</InformationalVersion>
     <Authors>vicz</Authors>
     <Company>vicz</Company>
     <Product>记忆黑洞</Product>
@@ -19,8 +19,11 @@
     <!-- v3.0.0: 仅发布 win-x64。
          旧版同时编 win-x86 / win-x64, 但 x86 进程用户地址空间 2~4 GB,
          写入几百 MB 以上的 BLOB 时 SQLite 事务极易触发 SQLITE_NOMEM(error 7)。
-         x64 下进程地址空间充裕, 同样的代码可稳定存到接近 900 MB（十进制）。 -->
+         x64 下进程地址空间充裕, 同样的代码可稳定存到接近 800 MB（十进制）。 -->
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <!-- v3.1.0(问题:最大化窗口消失): PerMonitorV2 DPI 感知,解决 System-Aware 下
+         混合缩放/双屏不同 DPI 时最大化窗口被摆出屏幕而"消失"的问题。 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

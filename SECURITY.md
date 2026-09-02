@@ -7,7 +7,7 @@
 | 承诺 | 说明 |
 |---|---|
 | 纯本地存储 | 所有记忆数据保存在 EXE 同目录的 `.memoryblackhole` 文件夹；程序默认不上云、不主动联网上传。 |
-| 媒体原样存储 | 图片/音频/视频保持原格式；900MB 内的文件可分块流式存入本地 SQLite，超过阈值的文件副本保存在 `.memoryblackhole/files`。阈值刻意小于 SQLite 默认 `SQLITE_MAX_LENGTH=1,000,000,000` 字节，避免 1 GB 附近文件因编译期上限触发 `string or blob too big` 错误。 |
+| 媒体原样存储 | 图片/音频/视频保持原格式；800MB 内的文件可分块流式存入本地 SQLite，超过阈值的文件副本保存在 `.memoryblackhole/files`。阈值刻意小于 SQLite 默认 `SQLITE_MAX_LENGTH=1,000,000,000` 字节，避免 1 GB 附近文件因编译期上限触发 `string or blob too big` 错误。 |
 | 密码保护 | 密码只保存 PBKDF2 哈希 + 随机盐，**不存储明文**；退出记忆空间后再次进入须重新验证。 |
 | 无追踪 | 不收集使用统计、不上报日志、无远程遥测。 |
 

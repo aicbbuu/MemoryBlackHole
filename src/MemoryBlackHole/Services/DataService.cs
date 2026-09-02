@@ -22,14 +22,14 @@ namespace MemoryBlackHole.Services
     /// </summary>
     public class DataService : IDisposable
     {
-        /// <summary>单个 SQLite BLOB 的最大文件大小；超过此大小改为外部副本。</summary>
-        public const long LargeFileThreshold = 1L * 1024 * 1024 * 1024; // 1 GiB
+        /// <summary>单个 SQLite BLOB 的最大文件大小；超过此大小改为外部副本。（800MB 十进制，刻意小于 SQLite 默认上限 ~953MB）</summary>
+        public const long LargeFileThreshold = 800_000_000; // 800 MB（十进制）
 
         /// <summary>BLOB 写入时的内存拷贝分块大小（4 MiB）。</summary>
         internal const int BlobChunkSize = 4 * 1024 * 1024;
 
         // v3.1.0: 列表投影列：显式列出，排除 FileData(大 BLOB 预览时按流提取)，保留 Thumbnail(列表缩略图)。
-        // 避免 SELECT * 把单行最大近 900MB 的 BLOB 整列带进结果集。
+        // 避免 SELECT * 把单行最大近 800MB 的 BLOB 整列带进结果集。
         private const string ItemColumns = "Id, Type, Title, Content, FilePath, Thumbnail, OriginalFileName, FileSizeBytes, Note, Tags, CreatedAt, IsFavorite";
         private const string ItemColumnsAliased = "i.Id, i.Type, i.Title, i.Content, i.FilePath, i.Thumbnail, i.OriginalFileName, i.FileSizeBytes, i.Note, i.Tags, i.CreatedAt, i.IsFavorite";
 
@@ -54,7 +54,7 @@ namespace MemoryBlackHole.Services
         private readonly object _settingConnLock = new();
 
         /// <summary>
-        /// 创建本地存储服务。默认文件大小阈值为 1GiB；可传入较小阈值用于自动化测试。
+        /// 创建本地存储服务。默认文件大小阈值为 800MB（十进制）；可传入较小阈值用于自动化测试。
         /// </summary>
         public DataService(string? dataDir = null, long largeFileThreshold = LargeFileThreshold)
         {

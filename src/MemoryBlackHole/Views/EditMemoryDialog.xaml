@@ -28,9 +28,19 @@
                      Foreground="White" Padding="11" AcceptsReturn="True" TextWrapping="Wrap"
                      VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
             <StackPanel Grid.Row="3" Margin="0,12,0,0">
-                <TextBlock Text="标签（可选，用逗号分隔）" Foreground="#97A1BB" FontSize="12" Margin="0,0,0,5"/>
-                <TextBox x:Name="TagsBox" Height="38" Background="#232B3E" BorderBrush="#414D70"
-                         Foreground="White" Padding="10,8"/>
+                <TextBlock Text="标签（可自定义，用逗号分隔）" Foreground="#97A1BB" FontSize="12" Margin="0,0,0,5"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- v3.1.0 兼容 AddItemDialog：左侧固定类型词(不可编辑)，标签框只装用户自定义标签 -->
+                    <Border Background="#6D5DF7" CornerRadius="4" Padding="8,4" VerticalAlignment="Center" Margin="0,0,6,0">
+                        <TextBlock x:Name="FixedTagLabel" Text="文本" Foreground="White" FontSize="13"/>
+                    </Border>
+                    <TextBox Grid.Column="1" x:Name="TagsBox" Height="28" Background="#232B3E" BorderBrush="#414D70"
+                             Foreground="White" Padding="10,6" VerticalContentAlignment="Center"/>
+                </Grid>
                 <TextBlock x:Name="FileText" Foreground="#8793B2" FontSize="11" TextWrapping="Wrap" Margin="0,10,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">

@@ -83,7 +83,7 @@ static async Task RunLargeBlobRoundtripAsync(string root, string dataDirectory, 
     var sourceSize = new FileInfo(sourcePath).Length;
     Console.WriteLine($"  · 生成 {sizeMiB} MiB 随机源文件, SHA-256={sourceHash[..16]}..., 字节数={sourceSize}");
 
-    // 2) 默认阈值 1 GiB,文件必然走 AddBlobFile(分块写 BLOB)路径。
+    // 2) 默认阈值 800MB(十进制) > 300/500 MiB,文件必然走 AddBlobFile(分块写 BLOB)路径。
     var service = new DataService(largeDataDir);
 
     var item = NewFileItem(Path.GetFileName(sourcePath), sourceSize);

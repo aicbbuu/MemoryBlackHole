@@ -2,11 +2,13 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Shell;
+using System.Windows.Threading;
 using MemoryBlackHole.Models;
 using MemoryBlackHole.Services;
 
@@ -21,6 +23,14 @@ namespace MemoryBlackHole.Views
         private FileStream? _imageStream;
         public bool EditRequested { get; private set; }
         public bool DeleteRequested { get; private set; }
+
+        // v3.1.0: 媒体播放控制状态。_mediaPollTimer 每 ~400ms 轮询 Position 更新进度条,
+        // 仅"播放中且未拖动"时更新;用 _isDraggingProgress 区分用户拖动与程序更新防回弹。
+        private readonly DispatcherTimer _mediaPollTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
+        private bool _mediaReady;
+        private double _mediaDurationSeconds;
+        private bool _isDraggingProgress;
+        private bool _seekFromTimer;
 
         // v3.0.3 重打(问题1): 无边框窗口最大化用 WM_GETMINMAXINFO(见 NativeWindow)+ 最大化时
         // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
@@ -53,6 +63,7 @@ namespace MemoryBlackHole.Views
                 }
             };
             Closed += (_, _) => CleanupTemp();
+            _mediaPollTimer.Tick += (_, _) => PollMediaPosition();
         }
 
         // v3.0.3 重打(问题1): 无边框窗口最大化的标准做法,与主窗口/新增弹窗完全一致:
@@ -78,6 +89,12 @@ namespace MemoryBlackHole.Views
 
         private void ShowContent()
         {
+            // v3.1.0: 默认关闭媒体控制条与轮询定时器;仅 Video/Audio 再开启。
+            _mediaPollTimer.Stop();
+            _mediaReady = false;
+            _isDraggingProgress = false;
+            if (MediaControls != null) MediaControls.Visibility = Visibility.Collapsed;
+
             if (_item.Type == "Text")
             {
                 // 文本：支持 Markdown 渲染
@@ -123,9 +140,13 @@ namespace MemoryBlackHole.Views
             }
             else if ((_item.Type == "Video" || _item.Type == "Audio") && path != null)
             {
-                MediaPreview.Source = new Uri(path);
-                MediaPreview.Visibility = Visibility.Visible;
+                // v3.1.0: 用 file:// 转义后的 Uri,避免含 # % & 等字符的路径被当作 fragment/转义/参数解析失败。
+                ConfigureMediaEvents();
+                ResetMediaState();
+                MediaControls.Visibility = Visibility.Visible;
+                MediaPreview.Source = ToMediaUri(path);
                 MediaPreview.Play();
+                _mediaPollTimer.Start();
                 // v3.0.3(任务B): 视频/音频支持双击全屏预览,与图片一致(ESC 还原),切全屏后 BringIntoView 确保可见。
                 MediaPreview.MouseLeftButtonDown -= PreviewElement_MouseLeftButtonDown;
                 MediaPreview.MouseLeftButtonDown += PreviewElement_MouseLeftButtonDown;
@@ -136,6 +157,147 @@ namespace MemoryBlackHole.Views
                 FileInfoText.Text = $"{_item.OriginalFileName ?? "未命名文件"}\n{App.FormatSize(_item.FileSizeBytes)}";
                 OpenFileButton.Visibility = string.IsNullOrWhiteSpace(path) ? Visibility.Collapsed : Visibility.Visible;
             }
+        }
+
+        // ---- v3.1.0 媒体播放控制 ----
+
+        private void ConfigureMediaEvents()
+        {
+            MediaPreview.MediaOpened -= MediaPreview_MediaOpened;
+            MediaPreview.MediaOpened += MediaPreview_MediaOpened;
+            MediaPreview.MediaEnded -= MediaPreview_MediaEnded;
+            MediaPreview.MediaEnded += MediaPreview_MediaEnded;
+            MediaPreview.MediaFailed -= MediaPreview_MediaFailed;
+            MediaPreview.MediaFailed += MediaPreview_MediaFailed;
+        }
+
+        private void ResetMediaState()
+        {
+            _mediaReady = false;
+            _mediaDurationSeconds = 0;
+            _isDraggingProgress = false;
+            _seekFromTimer = false;
+            ProgressSlider.Value = 0;
+            ProgressSlider.Maximum = 1;
+            ProgressSlider.IsEnabled = true;
+            TimeText.Text = "00:00 / 00:00";
+            PlayPauseButton.Content = "⏸";
+        }
+
+        /// <summary>每 ~400ms 轮询一次播放位置;仅播放且未拖动时更新进度条,防止拖动回弹。</summary>
+        private void PollMediaPosition()
+        {
+            if (!_mediaReady || _mediaDurationSeconds <= 0) return;
+            if (_isDraggingProgress) return;
+            if (!MediaPreview.IsPlaying) return;
+            double pos = Math.Clamp(MediaPreview.Position.TotalSeconds, 0, _mediaDurationSeconds);
+            _seekFromTimer = true;
+            ProgressSlider.Value = pos;
+            _seekFromTimer = false;
+        }
+
+        private void PlayPause_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_mediaReady) return;
+            if (MediaPreview.IsPlaying)
+            {
+                MediaPreview.Pause();
+                PlayPauseButton.Content = "▶";
+            }
+            else
+            {
+                // 已到尾末则从头播放
+                if (_mediaDurationSeconds > 0 &&
+                    MediaPreview.NaturalDuration.HasTimeSpan &&
+                    MediaPreview.Position >= MediaPreview.NaturalDuration.TimeSpan)
+                    MediaPreview.Position = TimeSpan.Zero;
+                MediaPreview.Play();
+                PlayPauseButton.Content = "⏸";
+            }
+        }
+
+        private void ProgressSlider_ThumbDragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e)
+        {
+            _isDraggingProgress = true;
+        }
+
+        private void ProgressSlider_ThumbDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            _isDraggingProgress = false;
+            if (_mediaReady && _mediaDurationSeconds > 0)
+                MediaPreview.Position = TimeSpan.FromSeconds(Math.Clamp(ProgressSlider.Value, 0, _mediaDurationSeconds));
+            TimeText.Text = FormatTime(ProgressSlider.Value, _mediaDurationSeconds);
+        }
+
+        private void ProgressSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            TimeText.Text = FormatTime(e.NewValue, _mediaDurationSeconds);
+            // 程序更新(轮询定时器)→ 只反映,不 seek
+            if (_seekFromTimer) return;
+            // 拖动过程中→ 不实时 seek,等 ThumbDragCompleted
+            if (_isDraggingProgress) return;
+            // 直接点击进度条/键盘改值 → 立即跳转
+            if (_mediaReady && _mediaDurationSeconds > 0)
+                MediaPreview.Position = TimeSpan.FromSeconds(Math.Clamp(e.NewValue, 0, _mediaDurationSeconds));
+        }
+
+        private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            MediaPreview.Volume = Math.Clamp(VolumeSlider.Value / 100.0, 0.0, 1.0);
+        }
+
+        private void MediaPreview_MediaOpened(object? sender, RoutedEventArgs e)
+        {
+            _mediaReady = true;
+            var dur = MediaPreview.NaturalDuration;
+            if (dur.HasTimeSpan && dur.TimeSpan > TimeSpan.Zero)
+            {
+                _mediaDurationSeconds = dur.TimeSpan.TotalSeconds;
+                ProgressSlider.Maximum = _mediaDurationSeconds;
+                ProgressSlider.IsEnabled = true;
+            }
+            else
+            {
+                // 无限时长(直播流等):无总时长可跳转,禁用进度条
+                _mediaDurationSeconds = 0;
+                ProgressSlider.Maximum = 1;
+                ProgressSlider.IsEnabled = false;
+            }
+            PlayPauseButton.Content = MediaPreview.IsPlaying ? "⏸" : "▶";
+            TimeText.Text = FormatTime(MediaPreview.Position.TotalSeconds, _mediaDurationSeconds);
+        }
+
+        private void MediaPreview_MediaEnded(object? sender, RoutedEventArgs e)
+        {
+            PlayPauseButton.Content = "▶";
+            if (_mediaDurationSeconds > 0)
+                TimeText.Text = FormatTime(_mediaDurationSeconds, _mediaDurationSeconds);
+        }
+
+        private void MediaPreview_MediaFailed(object? sender, ExceptionRoutedEventArgs e)
+        {
+            _mediaReady = false;
+            _mediaPollTimer.Stop();
+            MediaControls.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>把本地路径转成 MediaElement 可解析的 file:// Uri,转义 # % & 等保留字符。</summary>
+        private static Uri ToMediaUri(string path)
+        {
+            var full = Path.GetFullPath(path).Replace('\\', '/');
+            full = full.Replace("%", "%25").Replace("#", "%23").Replace("&", "%26");
+            if (!full.StartsWith("/", StringComparison.Ordinal))
+                full = "/" + full;
+            return new Uri("file://" + full, UriKind.Absolute);
+        }
+
+        private static string FormatTime(double seconds, double totalSeconds)
+        {
+            var cur = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            var total = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
+            var curStr = ((int)cur.TotalMinutes).ToString("00") + ":" + cur.Seconds.ToString("00");
+            var totalStr = ((int)total.TotalMinutes).ToString("00") + ":" + total.Seconds.ToString("00");
+            return curStr + " / " + totalStr;
         }
 
         /// <summary>
@@ -281,6 +443,8 @@ namespace MemoryBlackHole.Views
 
         private void CleanupTemp()
         {
+            // v3.1.0: 先停止轮询定时器,防止窗口关闭后 Tick 访问已卸载的 UI。
+            _mediaPollTimer.Stop();
             // v3.1.0: 先显式停止/关闭媒体,释放其对临时文件的锁定,再删临时文件,避免 %TEMP% 残留。
             try { if (MediaPreview != null) { MediaPreview.Stop(); MediaPreview.Close(); } } catch (Exception ex) { App.Log("MediaPreview 释放失败: " + ex.Message); }
             // v3.0.9: 再释放图片 FileStream(若存在)

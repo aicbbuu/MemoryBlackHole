@@ -19,7 +19,7 @@ namespace MemoryBlackHole.Models
         /// <summary>文件/媒体对应的本地存储路径（库内副本的路径）</summary>
         public string? FilePath { get; set; }
 
-        /// <summary>媒体的本地数据库二进制内容；≤1GiB 的文件存入 SQLite，超出阈值时为 null。</summary>
+        /// <summary>媒体的本地数据库二进制内容；≤800MB（十进制）的文件存入 SQLite，超出阈值时为 null。</summary>
         public byte[]? FileData { get; set; }
 
         /// <summary>原始文件名（入纳入时）</summary>
