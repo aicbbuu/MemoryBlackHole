@@ -892,7 +892,7 @@ Loaded += (_, _) =>
 
         private void MusicPlayer_MediaEnded(object? sender, EventArgs e) => _ = ChangeMusicAsync(1);   // 播完自动下一首,循环
 
-        private void MusicPlayer_MediaFailed(object? sender, MediaFailedEventArgs e)
+        private void MusicPlayer_MediaFailed(object? sender, ExceptionEventArgs e)
         {
             App.Log("背景音乐播放失败: " + e.ErrorException?.Message);
             _musicReady = false;

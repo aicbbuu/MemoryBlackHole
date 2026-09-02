@@ -335,7 +335,7 @@ namespace MemoryBlackHole.Views
                 TimeText.Text = FormatTime(_mediaDurationSeconds, _mediaDurationSeconds);
         }
 
-        private void MediaPlayer_MediaFailed(object? sender, MediaFailedEventArgs e)
+        private void MediaPlayer_MediaFailed(object? sender, ExceptionEventArgs e)
         {
             _isPlaying = false;
             _mediaReady = false;
