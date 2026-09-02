@@ -98,8 +98,9 @@
                                     Background="#6D5DF7" Foreground="White" BorderThickness="0" Padding="10,8"/>
                         </StackPanel>
                         <Image x:Name="ImagePreview" Stretch="Uniform" Visibility="Collapsed"/>
-                        <MediaElement x:Name="MediaPreview" LoadedBehavior="Manual" UnloadedBehavior="Stop"
-                                      Visibility="Collapsed" Stretch="Uniform"/>
+                        <!-- v3.1.2: 视频改用 MediaPlayer + VideoDrawing 经 DrawingBrush 渲染到 Rectangle(WPF 保留模式合成),
+                             使视频帧在 AllowsTransparency 透明分层窗口中也能正常显示;音频仅音频,无画面,Fill 不用。 -->
+                        <Rectangle x:Name="VideoSurface" Fill="Black" Visibility="Collapsed"/>
                         <!-- v3.1.0: 视频/音频播放控制条(仅媒体类型显示；文本/图片/链接/文件不显示)。
                              播放/暂停、可拖动进度条、当前时间/总时长、音量;由轮询定时器实时推进。 -->
                         <Border x:Name="MediaControls" Grid.Row="0" Visibility="Collapsed"

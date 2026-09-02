@@ -727,6 +727,59 @@ namespace MemoryBlackHole.Services
             }
         }
 
+        /// <summary>
+        /// v3.1.2: 把记忆条目的媒体提取为"可播放"的本地文件路径，供预览弹窗与主页背景音乐共用。
+        /// 优先级：SQLite BLOB 存库 → 流式提取到临时文件；内存中的 FileData → 写临时文件；外部副本 → 直接用 FilePath。
+        /// 返回 (Path, IsTemp)：IsTemp=true 表示本次新生成的临时文件，调用方在用完后负责删除；
+        /// IsTemp=false 表示外部副本（无需删除，也不属于本方法管理）。无可用文件返回 null。
+        /// </summary>
+        public (string Path, bool IsTemp)? ExtractMediaFile(MemoryItem item)
+        {
+            if (item == null) return null;
+            string ext = Path.GetExtension(item.OriginalFileName ?? "");
+            if (string.IsNullOrEmpty(ext)) ext = ".bin";
+
+            // 1) BLOB 存库 → 流式提取到临时文件
+            if (item.Id > 0 && HasBlobData(item.Id))
+            {
+                string tmp = Path.Combine(Path.GetTempPath(), $"MemoryBlackHole_{Guid.NewGuid():N}{ext}");
+                try
+                {
+                    ExtractBlobToFile(item.Id, tmp);
+                    return (tmp, true);
+                }
+                catch (Exception ex)
+                {
+                    App.Log("ExtractMediaFile 提取 BLOB 失败: " + ex.Message);
+                    try { File.Delete(tmp); } catch { }
+                    return null;
+                }
+            }
+
+            // 2) FileData 已在内存(刚 Add 完立刻预览的场景)
+            if (item.FileData != null && item.FileData.Length > 0)
+            {
+                string tmp = Path.Combine(Path.GetTempPath(), $"MemoryBlackHole_{Guid.NewGuid():N}{ext}");
+                try
+                {
+                    File.WriteAllBytes(tmp, item.FileData);
+                    return (tmp, true);
+                }
+                catch (Exception ex)
+                {
+                    App.Log("ExtractMediaFile 写 FileData 临时文件失败: " + ex.Message);
+                    try { File.Delete(tmp); } catch { }
+                    return null;
+                }
+            }
+
+            // 3) 外部副本(超过阈值) → 直接用库内副本路径
+            if (item.FilePath != null && File.Exists(item.FilePath))
+                return (item.FilePath, false);
+
+            return null;
+        }
+
         /// <summary>取/打开 Settings 专用长连接(线程安全单例)。</summary>
         private SqliteConnection GetOrOpenSettingConn()
         {

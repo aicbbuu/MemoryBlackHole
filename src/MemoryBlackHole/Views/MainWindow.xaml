@@ -237,6 +237,56 @@
                     <TextBlock Text="?" FontSize="16" FontWeight="Bold" Foreground="#A5B0C8"/>
                 </Button>
             </StackPanel>
+
+            <!-- v3.1.2 左下角背景音乐播放器:默认折叠成小圆钮(🎵),点击展开为紧凑控制面板 -->
+            <Grid x:Name="MusicPlayer" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="26,0,0,26">
+                <Button x:Name="MusicToggle" Content="🎵" Style="{StaticResource CircleIconButton}"
+                        Click="MusicToggle_Click" ToolTip="背景音乐"/>
+                <Border x:Name="MusicPanel" Visibility="Collapsed" Background="#A6171D2A" CornerRadius="12"
+                        Padding="10" Width="290" Cursor="Arrow">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="MusicTitle" Text="背景音乐" Foreground="#CED5E7" FontSize="12"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="2,0,8,0"/>
+                            <Button Grid.Column="1" Content="—" Width="26" Height="24" Click="MusicToggle_Click"
+                                    Background="Transparent" Foreground="#97A1BB" BorderThickness="0" FontSize="13" Padding="0"/>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,2">
+                            <Button x:Name="MusicPrevButton" Content="⏮" Style="{StaticResource CircleIconButton}"
+                                    Click="MusicPrev_Click" ToolTip="上一首"/>
+                            <Button x:Name="MusicPlayPause" Content="▶" Style="{StaticResource CircleIconButton}"
+                                    Margin="8,0,8,0" Click="MusicPlayPause_Click" ToolTip="播放/暂停"/>
+                            <Button x:Name="MusicNextButton" Content="⏭" Style="{StaticResource CircleIconButton}"
+                                    Click="MusicNext_Click" ToolTip="下一首"/>
+                        </StackPanel>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="MusicProgress" Minimum="0" Maximum="1" Value="0" VerticalAlignment="Center"
+                                    PreviewMouseLeftButtonDown="MusicProgress_PreviewMouseLeftButtonDown"
+                                    PreviewMouseLeftButtonUp="MusicProgress_PreviewMouseLeftButtonUp"
+                                    ValueChanged="MusicProgress_ValueChanged"/>
+                            <TextBlock x:Name="MusicTime" Grid.Column="1" Text="00:00 / 00:00" Foreground="#A5B0C8"
+                                       FontSize="10" Margin="8,0,2,0" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="🔊" Foreground="#A5B0C8" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <Slider x:Name="MusicVolume" Grid.Column="1" Minimum="0" Maximum="100" Value="50"
+                                    ValueChanged="MusicVolume_ValueChanged" ToolTip="音量"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- 背面：黑洞 + 搜索 + 标签侧栏 + 统计 -->

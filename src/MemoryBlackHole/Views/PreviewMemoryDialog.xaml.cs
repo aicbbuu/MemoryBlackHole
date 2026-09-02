@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shell;
 using System.Windows.Threading;
@@ -33,6 +34,13 @@ namespace MemoryBlackHole.Views
         private bool _seekFromTimer;
         // v3.1.0: MediaElement 没有 IsPlaying 属性,用 _isPlaying 自行跟踪播放状态。
         private bool _isPlaying;
+
+        // v3.1.2(视频不显示): 透明分层窗口(AllowsTransparency)里 MediaElement 视频帧靠 WMP 硬件覆盖层,
+        // 无法与透明窗口正确合成→视频黑屏。改用 System.Windows.Media.MediaPlayer + VideoDrawing,
+        // 经 DrawingBrush 渲染到 Rectangle(WPF 保留模式合成,透明窗口即可正常显示);音频同样走 MediaPlayer。
+        private MediaPlayer? _mediaPlayer;
+        private VideoDrawing? _videoDrawing;
+        private DrawingBrush? _videoBrush;
 
         // v3.0.3 重打(问题1): 无边框窗口最大化用 WM_GETMINMAXINFO(见 NativeWindow)+ 最大化时
         // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
@@ -142,17 +150,32 @@ namespace MemoryBlackHole.Views
             }
             else if ((_item.Type == "Video" || _item.Type == "Audio") && path != null)
             {
-                // v3.1.0: 用 file:// 转义后的 Uri,避免含 # % & 等字符的路径被当作 fragment/转义/参数解析失败。
+                // v3.1.2: 视频/音频统一走 MediaPlayer(见类注释)。视频再用 VideoDrawing 渲染到 Rectangle;
+                // 音频无画面,只开声音(VideoSurface 保持 Collapsed)。
                 ConfigureMediaEvents();
                 ResetMediaState();
                 MediaControls!.Visibility = Visibility.Visible;
-                MediaPreview.Source = ToMediaUri(path);
-                MediaPreview.Play();
+                bool isVideo = _item.Type == "Video";
+                if (isVideo)
+                {
+                    CreateVideoSurface();
+                    VideoSurface.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    VideoSurface.Visibility = Visibility.Collapsed;
+                }
+                // v3.1.0: 用 file:// 转义后的 Uri,避免含 # % & 等字符的路径被当作 fragment/转义/参数解析失败。
+                _mediaPlayer!.Open(ToMediaUri(path));
+                _mediaPlayer.Play();
                 _isPlaying = true;
                 _mediaPollTimer.Start();
-                // v3.0.3(任务B): 视频/音频支持双击全屏预览,与图片一致(ESC 还原),切全屏后 BringIntoView 确保可见。
-                MediaPreview.MouseLeftButtonDown -= PreviewElement_MouseLeftButtonDown;
-                MediaPreview.MouseLeftButtonDown += PreviewElement_MouseLeftButtonDown;
+                // v3.0.3(任务B): 视频支持双击全屏预览(与图片一致,ESC 还原),切全屏后 BringIntoView 确保可见。
+                if (isVideo)
+                {
+                    VideoSurface.MouseLeftButtonDown -= PreviewElement_MouseLeftButtonDown;
+                    VideoSurface.MouseLeftButtonDown += PreviewElement_MouseLeftButtonDown;
+                }
             }
             else
             {
@@ -166,12 +189,29 @@ namespace MemoryBlackHole.Views
 
         private void ConfigureMediaEvents()
         {
-            MediaPreview.MediaOpened -= MediaPreview_MediaOpened;
-            MediaPreview.MediaOpened += MediaPreview_MediaOpened;
-            MediaPreview.MediaEnded -= MediaPreview_MediaEnded;
-            MediaPreview.MediaEnded += MediaPreview_MediaEnded;
-            MediaPreview.MediaFailed -= MediaPreview_MediaFailed;
-            MediaPreview.MediaFailed += MediaPreview_MediaFailed;
+            _mediaPlayer ??= new MediaPlayer();
+            // 初始音量跟随音量滑杆
+            _mediaPlayer.Volume = Math.Clamp(VolumeSlider.Value / 100.0, 0.0, 1.0);
+            _mediaPlayer.MediaOpened -= MediaPlayer_MediaOpened;
+            _mediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
+            _mediaPlayer.MediaEnded -= MediaPlayer_MediaEnded;
+            _mediaPlayer.MediaEnded += MediaPlayer_MediaEnded;
+            _mediaPlayer.MediaFailed -= MediaPlayer_MediaFailed;
+            _mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
+        }
+
+        /// <summary>用 MediaPlayer + VideoDrawing 生成视频画面 brush,赋给 VideoSurface(Fill)。
+        /// Stretch=Uniform + Viewbox=视频自然尺寸 → 等比缩放、居中、不溢出窗口;随容器自动缩放。</summary>
+        private void CreateVideoSurface()
+        {
+            var drawing = _videoDrawing = new VideoDrawing { Player = _mediaPlayer, Rect = new Rect(0, 0, 1, 1) };
+            _videoBrush = new DrawingBrush(drawing)
+            {
+                Stretch = Stretch.Uniform,
+                Viewbox = new Rect(0, 0, 1, 1),
+                ViewboxUnits = BrushMappingMode.Absolute
+            };
+            VideoSurface.Fill = _videoBrush;
         }
 
         private void ResetMediaState()
@@ -196,7 +236,7 @@ namespace MemoryBlackHole.Views
             // 两者任一成立都视为"用户正在操作进度条",暂停轮询避免把进度值拉回去。
             if (_isDraggingProgress || ProgressSlider.IsMouseCaptureWithin) return;
             if (!_isPlaying) return;
-            double pos = Math.Clamp(MediaPreview.Position.TotalSeconds, 0, _mediaDurationSeconds);
+            double pos = Math.Clamp(_mediaPlayer!.Position.TotalSeconds, 0, _mediaDurationSeconds);
             _seekFromTimer = true;
             ProgressSlider.Value = pos;
             _seekFromTimer = false;
@@ -204,10 +244,10 @@ namespace MemoryBlackHole.Views
 
         private void PlayPause_Click(object sender, RoutedEventArgs e)
         {
-            if (!_mediaReady) return;
+            if (!_mediaReady || _mediaPlayer == null) return;
             if (_isPlaying)
             {
-                MediaPreview.Pause();
+                _mediaPlayer.Pause();
                 _isPlaying = false;
                 PlayPauseButton.Content = "▶";
             }
@@ -215,10 +255,10 @@ namespace MemoryBlackHole.Views
             {
                 // 已到尾末则从头播放
                 if (_mediaDurationSeconds > 0 &&
-                    MediaPreview.NaturalDuration.HasTimeSpan &&
-                    MediaPreview.Position >= MediaPreview.NaturalDuration.TimeSpan)
-                    MediaPreview.Position = TimeSpan.Zero;
-                MediaPreview.Play();
+                    _mediaPlayer.NaturalDuration.HasTimeSpan &&
+                    _mediaPlayer.Position >= _mediaPlayer.NaturalDuration.TimeSpan)
+                    _mediaPlayer.Position = TimeSpan.Zero;
+                _mediaPlayer.Play();
                 _isPlaying = true;
                 PlayPauseButton.Content = "⏸";
             }
@@ -235,8 +275,8 @@ namespace MemoryBlackHole.Views
         {
             _isDraggingProgress = false;
             // 松手后真正跳转(拖动或点轨道都从这里定位)
-            if (_mediaReady && _mediaDurationSeconds > 0)
-                MediaPreview.Position = TimeSpan.FromSeconds(Math.Clamp(ProgressSlider.Value, 0, _mediaDurationSeconds));
+            if (_mediaReady && _mediaPlayer != null && _mediaDurationSeconds > 0)
+                _mediaPlayer.Position = TimeSpan.FromSeconds(Math.Clamp(ProgressSlider.Value, 0, _mediaDurationSeconds));
             TimeText.Text = FormatTime(ProgressSlider.Value, _mediaDurationSeconds);
         }
 
@@ -248,19 +288,20 @@ namespace MemoryBlackHole.Views
             // 拖动过程中→ 不实时 seek,等 ThumbDragCompleted
             if (_isDraggingProgress) return;
             // 直接点击进度条/键盘改值 → 立即跳转
-            if (_mediaReady && _mediaDurationSeconds > 0)
-                MediaPreview.Position = TimeSpan.FromSeconds(Math.Clamp(e.NewValue, 0, _mediaDurationSeconds));
+            if (_mediaReady && _mediaPlayer != null && _mediaDurationSeconds > 0)
+                _mediaPlayer.Position = TimeSpan.FromSeconds(Math.Clamp(e.NewValue, 0, _mediaDurationSeconds));
         }
 
         private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            MediaPreview.Volume = Math.Clamp(VolumeSlider.Value / 100.0, 0.0, 1.0);
+            if (_mediaPlayer != null)
+                _mediaPlayer.Volume = Math.Clamp(VolumeSlider.Value / 100.0, 0.0, 1.0);
         }
 
-        private void MediaPreview_MediaOpened(object? sender, RoutedEventArgs e)
+        private void MediaPlayer_MediaOpened(object? sender, EventArgs e)
         {
             _mediaReady = true;
-            var dur = MediaPreview.NaturalDuration;
+            var dur = _mediaPlayer!.NaturalDuration;
             if (dur.HasTimeSpan && dur.TimeSpan > TimeSpan.Zero)
             {
                 _mediaDurationSeconds = dur.TimeSpan.TotalSeconds;
@@ -275,10 +316,18 @@ namespace MemoryBlackHole.Views
                 ProgressSlider.IsEnabled = false;
             }
             PlayPauseButton.Content = _isPlaying ? "⏸" : "▶";
-            TimeText.Text = FormatTime(MediaPreview.Position.TotalSeconds, _mediaDurationSeconds);
+            TimeText.Text = FormatTime(_mediaPlayer.Position.TotalSeconds, _mediaDurationSeconds);
+            // v3.1.2: 拿到视频自然尺寸后,更新 VideoDrawing 的 Rect 与 brush Viewbox,确保等比缩放不变形。
+            if (_item.Type == "Video" && _videoDrawing != null && _videoBrush != null)
+            {
+                double vw = Math.Max(1, _mediaPlayer.NaturalVideoWidth);
+                double vh = Math.Max(1, _mediaPlayer.NaturalVideoHeight);
+                _videoDrawing.Rect = new Rect(0, 0, vw, vh);
+                _videoBrush.Viewbox = new Rect(0, 0, vw, vh);
+            }
         }
 
-        private void MediaPreview_MediaEnded(object? sender, RoutedEventArgs e)
+        private void MediaPlayer_MediaEnded(object? sender, EventArgs e)
         {
             _isPlaying = false;
             PlayPauseButton.Content = "▶";
@@ -286,7 +335,7 @@ namespace MemoryBlackHole.Views
                 TimeText.Text = FormatTime(_mediaDurationSeconds, _mediaDurationSeconds);
         }
 
-        private void MediaPreview_MediaFailed(object? sender, ExceptionRoutedEventArgs e)
+        private void MediaPlayer_MediaFailed(object? sender, MediaFailedEventArgs e)
         {
             _isPlaying = false;
             _mediaReady = false;
@@ -329,46 +378,13 @@ namespace MemoryBlackHole.Views
 
         private string? GetPreviewPath()
         {
-            // v3.0.9: 优先用 service 流式提取,避免把 800MB+ BLOB 一次加载到 .NET 内存
-            if (_service != null && _item.Id > 0 && _service.HasBlobData(_item.Id))
-            {
-                string ext = Path.GetExtension(_item.OriginalFileName ?? "") ?? ".bin";
-                _tempPreview = Path.Combine(Path.GetTempPath(), $"MemoryBlackHole_{Guid.NewGuid():N}{ext}");
-                try
-                {
-                    _service.ExtractBlobToFile(_item.Id, _tempPreview);
-                    return _tempPreview;
-                }
-                catch
-                {
-                    // ExtractBlobToFile 失败时退回 FileData(若已加载)
-                    if (_item.FileData != null && _item.FileData.Length > 0)
-                    {
-                        using var fs = File.Create(_tempPreview);
-                        fs.Write(_item.FileData, 0, _item.FileData.Length);
-                        return _tempPreview;
-                    }
-                    return null;
-                }
-            }
-
-            // 情况 A:FileData 已在内存(刚 Add 完立刻 Preview 的场景)
-            if (_item.FileData != null && _item.FileData.Length > 0)
-            {
-                string ext = Path.GetExtension(_item.OriginalFileName ?? "") ?? ".bin";
-                _tempPreview = Path.Combine(Path.GetTempPath(), $"MemoryBlackHole_{Guid.NewGuid():N}{ext}");
-                using (var fs = File.Create(_tempPreview))
-                {
-                    fs.Write(_item.FileData, 0, _item.FileData.Length);
-                }
-                return _tempPreview;
-            }
-
-            // 情况 B:外部文件(超过 SQLite BLOB 阈值的存储方式)
-            if (_item.FilePath != null && File.Exists(_item.FilePath))
-                return _item.FilePath;
-
-            return null;
+            // v3.1.2: 统一走 DataService.ExtractMediaFile(BLOB→临时文件 / FileData→临时文件 / 外部副本→FilePath),
+            // 避免复制三套提取+临时文件逻辑;与主页背景音乐共用同一方法。
+            var result = _service?.ExtractMediaFile(_item);
+            if (result == null) return null;
+            (string path, bool isTemp) = result.Value;
+            if (isTemp) _tempPreview = path;  // 记下临时文件,关窗时清理
+            return path;
         }
 
         private void OpenFile_Click(object sender, RoutedEventArgs e)
@@ -458,8 +474,9 @@ namespace MemoryBlackHole.Views
         {
             // v3.1.0: 先停止轮询定时器,防止窗口关闭后 Tick 访问已卸载的 UI。
             _mediaPollTimer.Stop();
-            // v3.1.0: 先显式停止/关闭媒体,释放其对临时文件的锁定,再删临时文件,避免 %TEMP% 残留。
-            try { if (MediaPreview != null) { MediaPreview.Stop(); MediaPreview.Close(); _isPlaying = false; } } catch (Exception ex) { App.Log("MediaPreview 释放失败: " + ex.Message); }
+            // v3.1.2: 关闭 MediaPlayer,释放其对临时文件的锁定,再删临时文件,避免 %TEMP% 残留。
+            try { _mediaPlayer?.Close(); _isPlaying = false; } catch (Exception ex) { App.Log("MediaPlayer 释放失败: " + ex.Message); }
+            _mediaPlayer = null; _videoDrawing = null; _videoBrush = null;
             // v3.0.9: 再释放图片 FileStream(若存在)
             try { _imageStream?.Dispose(); } catch (Exception ex) { App.Log("_imageStream 释放失败: " + ex.Message); }
             _imageStream = null;

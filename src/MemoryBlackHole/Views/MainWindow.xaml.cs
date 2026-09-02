@@ -45,6 +45,23 @@ namespace MemoryBlackHole.Views
         // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
         private readonly Thickness _resizeBorder;
         private HwndSource? _hwndSource;
+
+        // ---- v3.1.2 左下角背景音乐播放器 ----
+        // 音频用 System.Windows.Media.MediaPlayer(透明窗口只影响视频帧合成,音频不受影响)。
+        private MediaPlayer? _musicPlayer;
+        private List<MemoryItem>? _musicItems;   // Audio 类型记忆表(元数据,懒加载)
+        private int _musicIndex = -1;
+        private bool _musicQueueBuilt;
+        private bool _musicPlaying;
+        private bool _musicReady;                 // 当前曲目是否 Open 完成(拿到总时长)
+        private bool _musicDragging;              // 进度条拖动防回弹
+        private bool _musicSeekFromTimer;
+        private double _musicDurationSeconds;
+        private string? _musicCurTemp;            // 当前曲目临时文件(用于回退/关闭时清理)
+        private string? _musicTempToDelete;       // 上一首临时文件,等新曲 Open 完成后删除
+        private int _musicConsFailures;           // 连续不可播计数,防止整列表都坏时无限切歌
+        private readonly DispatcherTimer _musicPollTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
+
         private static Brush CreateFrozenBrush(Color c)
         {
             var b = new SolidColorBrush(c);
@@ -96,11 +113,19 @@ Loaded += (_, _) =>
                 // (滚轮上=内容上、滚轮下=内容下)即与 Windows 文件管理器一致。
                 // 之前手动 `-e.Delta` 在某些嵌套/触摸板下会反向。
             };
+            _musicPollTimer.Tick += (_, _) => PollMusicPosition();
+
             Closed += (_, _) =>
             {
                 CompositionTarget.Rendering -= OnRendering;
                 // v3.0.9: 停止搜索防抖 timer,避免 Tick 在窗口关闭后访问已释放 UI
                 _searchDebouncer.Stop();
+                // v3.1.2: 停止音乐轮询、关闭播放器,并清理提取出的临时文件
+                _musicPollTimer.Stop();
+                try { _musicPlayer?.Close(); } catch { }
+                _musicPlayer = null;
+                DeleteMusicTemp(_musicCurTemp);
+                DeleteMusicTemp(_musicTempToDelete);
                 // v3.1.0: 退出时释放长连接 + WAL checkpoint,防止库文件只增不减
                 try { _service?.Checkpoint(); } catch { }
                 _service?.Dispose();
@@ -673,6 +698,240 @@ Loaded += (_, _) =>
                                  $"📄 文件 {stats.File}  ·  占用 {sizeStr}";
             }
             catch (Exception ex) { App.Log("RefreshSidebar 失败: " + ex.Message); }
+        }
+
+        // ---- v3.1.2 左下角背景音乐播放器 ----
+
+        /// <summary>展开/收起音乐面板(小圆钮 或 面板内的收起按钮共用)。</summary>
+        private void MusicToggle_Click(object sender, RoutedEventArgs e)
+        {
+            bool expand = MusicPanel.Visibility != Visibility.Visible;
+            MusicPanel.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+            MusicToggle.Visibility = expand ? Visibility.Collapsed : Visibility.Visible;
+            if (expand)
+            {
+                BuildMusicQueue();
+                if (_musicItems != null && _musicItems.Count > 0)
+                    MusicTitle.Text = _musicTitleForIndex(_musicIndex);
+                else
+                    MusicTitle.Text = "暂无背景音乐";
+            }
+        }
+
+        /// <summary>懒加载音频记忆列表(仅元数据,Search 走索引;真正提取 BLOB 到文件在播放时才后台做)。</summary>
+        private void BuildMusicQueue()
+        {
+            if (_musicQueueBuilt) return;
+            _musicQueueBuilt = true;
+            try
+            {
+                _musicItems = _service?.Search("", type: "Audio") ?? new List<MemoryItem>();
+            }
+            catch (Exception ex)
+            {
+                App.Log("构建背景音乐列表失败: " + ex.Message);
+                _musicItems = new List<MemoryItem>();
+            }
+        }
+
+        private async void MusicPlayPause_Click(object sender, RoutedEventArgs e)
+        {
+            BuildMusicQueue();
+            if (_musicItems == null || _musicItems.Count == 0) { MusicTitle.Text = "暂无背景音乐"; return; }
+            if (_musicPlaying)
+            {
+                _musicPlayer?.Pause();
+                _musicPlaying = false;
+                MusicPlayPause.Content = "▶";
+                return;
+            }
+            // 播放:若无当前曲先定位;若已加载(暂停后恢复)直接 Play,否则加载并播放
+            if (_musicIndex < 0) { _musicIndex = 0; _musicReady = false; }
+            await PlayMusicAsync(resume: _musicReady && _musicPlayer != null);
+        }
+
+        private async Task PlayMusicAsync(bool resume)
+        {
+            if (resume) { _musicPlayer!.Play(); _musicPlaying = true; MusicPlayPause.Content = "⏸"; return; }
+            await LoadTrackAndPlayAsync(_musicIndex);
+        }
+
+        private async void MusicPrev_Click(object sender, RoutedEventArgs e) => await ChangeMusicAsync(-1);
+        private async void MusicNext_Click(object sender, RoutedEventArgs e) => await ChangeMusicAsync(1);
+
+        private async Task ChangeMusicAsync(int delta)
+        {
+            BuildMusicQueue();
+            if (_musicItems == null || _musicItems.Count == 0) { MusicTitle.Text = "暂无背景音乐"; return; }
+            NextMusicIndex(delta);
+            _musicReady = false;
+            await LoadTrackAndPlayAsync(_musicIndex);
+        }
+
+        /// <summary>循环切歌:上一首(-1)/下一首(+1),负索引回绕到列表末尾,超尾回绕到开头。</summary>
+        private void NextMusicIndex(int delta)
+        {
+            if (_musicItems == null || _musicItems.Count == 0) return;
+            int start = _musicIndex < 0 ? 0 : _musicIndex;
+            _musicIndex = (start + delta + _musicItems.Count) % _musicItems.Count;
+        }
+
+        /// <summary>加载第 idx 首并播放:后台提取可播文件(不阻塞 UI),再在 UI 线程 Open+Play。</summary>
+        private async Task LoadTrackAndPlayAsync(int idx)
+        {
+            if (_musicItems == null || idx < 0 || idx >= _musicItems.Count || _service == null)
+            {
+                MusicTitle.Text = "暂无背景音乐";
+                return;
+            }
+            var item = _musicItems[idx];
+            MusicTitle.Text = _musicTitleForIndex(idx);
+
+            // 提取:SQLite BLOB → 临时文件;外部副本 → 直接库内路径。放后台,避免 UI 卡顿。
+            var extracted = await Task.Run(() => _service.ExtractMediaFile(item));
+            if (extracted == null)
+            {
+                App.Log("背景音乐不可播(无可用文件): " + (item.OriginalFileName ?? item.Title));
+                // 连续失败计数:超过列表长度说明整轮都不可播,停止切歌,避免无限循环。
+                _musicConsFailures++;
+                if (_musicConsFailures >= _musicItems.Count)
+                {
+                    _musicConsFailures = 0;
+                    _musicPlaying = false;
+                    MusicPlayPause.Content = "▶";
+                    return;
+                }
+                NextMusicIndex(1);
+                await LoadTrackAndPlayAsync(_musicIndex);
+                return;
+            }
+            (string path, bool isTemp) = extracted.Value;
+
+            _musicTempToDelete = _musicCurTemp;   // 上一首的临时文件,等这首 Open 完成后删
+            _musicCurTemp = isTemp ? path : null;
+
+            var player = _musicPlayer;
+            if (player == null)
+            {
+                player = _musicPlayer = new MediaPlayer();
+                player.MediaOpened += MusicPlayer_MediaOpened;
+                player.MediaEnded += MusicPlayer_MediaEnded;
+                player.MediaFailed += MusicPlayer_MediaFailed;
+            }
+            _musicReady = false;
+            _musicDurationSeconds = 0;
+            _musicSeekFromTimer = false;
+            MusicProgress.Value = 0;
+            MusicTime.Text = "00:00 / 00:00";
+            player.Volume = Math.Clamp(MusicVolume.Value / 100.0, 0.0, 1.0);
+            player.Open(ToMediaUri(path));
+            player.Play();
+            _musicPlaying = true;
+            MusicPlayPause.Content = "⏸";
+            if (!_musicPollTimer.IsEnabled) _musicPollTimer.Start();
+        }
+
+        /// <summary>每 ~400ms 轮询 Position 更新进度条;仅播放且未拖动时,防回弹。</summary>
+        private void PollMusicPosition()
+        {
+            if (!_musicReady || _musicPlayer == null || _musicDurationSeconds <= 0) return;
+            if (_musicDragging || MusicProgress.IsMouseCaptureWithin) return;
+            if (!_musicPlaying) return;
+            double pos = Math.Clamp(_musicPlayer.Position.TotalSeconds, 0, _musicDurationSeconds);
+            _musicSeekFromTimer = true;
+            MusicProgress.Value = pos;
+            _musicSeekFromTimer = false;
+        }
+
+        private void MusicProgress_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _musicDragging = true;
+
+        private void MusicProgress_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _musicDragging = false;
+            if (_musicReady && _musicPlayer != null && _musicDurationSeconds > 0)
+                _musicPlayer.Position = TimeSpan.FromSeconds(Math.Clamp(MusicProgress.Value, 0, _musicDurationSeconds));
+            MusicTime.Text = FormatMusicTime(MusicProgress.Value, _musicDurationSeconds);
+        }
+
+        private void MusicProgress_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            MusicTime.Text = FormatMusicTime(e.NewValue, _musicDurationSeconds);
+            if (_musicSeekFromTimer) return;
+            if (_musicDragging) return;
+            if (_musicReady && _musicPlayer != null && _musicDurationSeconds > 0)
+                _musicPlayer.Position = TimeSpan.FromSeconds(Math.Clamp(e.NewValue, 0, _musicDurationSeconds));
+        }
+
+        private void MusicVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_musicPlayer != null)
+                _musicPlayer.Volume = Math.Clamp(MusicVolume.Value / 100.0, 0.0, 1.0);
+        }
+
+        private void MusicPlayer_MediaOpened(object? sender, EventArgs e)
+        {
+            _musicReady = true;
+            _musicConsFailures = 0;   // 成功打开,重置连续失败计数
+            var dur = _musicPlayer!.NaturalDuration;
+            if (dur.HasTimeSpan && dur.TimeSpan > TimeSpan.Zero)
+            {
+                _musicDurationSeconds = dur.TimeSpan.TotalSeconds;
+                MusicProgress.Maximum = _musicDurationSeconds;
+            }
+            else
+            {
+                _musicDurationSeconds = 0;
+                MusicProgress.Maximum = 1;
+            }
+            MusicPlayPause.Content = _musicPlaying ? "⏸" : "▶";
+            MusicTime.Text = FormatMusicTime(_musicPlayer.Position.TotalSeconds, _musicDurationSeconds);
+            // 上一首已切走且新曲 Open 完成 → 可安全删除其临时文件
+            DeleteMusicTemp(_musicTempToDelete);
+            _musicTempToDelete = null;
+        }
+
+        private void MusicPlayer_MediaEnded(object? sender, EventArgs e) => _ = ChangeMusicAsync(1);   // 播完自动下一首,循环
+
+        private void MusicPlayer_MediaFailed(object? sender, MediaFailedEventArgs e)
+        {
+            App.Log("背景音乐播放失败: " + e.ErrorException?.Message);
+            _musicReady = false;
+            _musicPlaying = false;
+            MusicPlayPause.Content = "▶";
+            _musicConsFailures++;
+            if (_musicConsFailures < (_musicItems?.Count ?? 1))
+                _ = ChangeMusicAsync(1);   // 跳过不可播的,播放下一首(带计数上限防无限循环)
+        }
+
+        private string _musicTitleForIndex(int idx)
+        {
+            if (_musicItems == null || idx < 0 || idx >= _musicItems.Count) return "背景音乐";
+            var it = _musicItems[idx];
+            return it.OriginalFileName ?? it.Title ?? it.DisplayText ?? "背景音乐";
+        }
+
+        private static void DeleteMusicTemp(string? p)
+        {
+            if (string.IsNullOrEmpty(p)) return;
+            try { if (File.Exists(p)) File.Delete(p); } catch { }
+        }
+
+        /// <summary>把本地路径转成 MediaPlayer 可解析的 file:// Uri,转义 # % & 等保留字符。</summary>
+        private static Uri ToMediaUri(string path)
+        {
+            var full = System.IO.Path.GetFullPath(path).Replace('\\', '/');
+            full = full.Replace("%", "%25").Replace("#", "%23").Replace("&", "%26");
+            if (!full.StartsWith("/", StringComparison.Ordinal))
+                full = "/" + full;
+            return new Uri("file://" + full, UriKind.Absolute);
+        }
+
+        private static string FormatMusicTime(double seconds, double totalSeconds)
+        {
+            var cur = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            var total = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
+            return ((int)cur.TotalMinutes).ToString("00") + ":" + cur.Seconds.ToString("00")
+                 + " / " + ((int)total.TotalMinutes).ToString("00") + ":" + total.Seconds.ToString("00");
         }
 
         /// <summary>
