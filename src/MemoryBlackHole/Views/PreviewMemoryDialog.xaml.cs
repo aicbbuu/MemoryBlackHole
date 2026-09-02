@@ -31,6 +31,8 @@ namespace MemoryBlackHole.Views
         private double _mediaDurationSeconds;
         private bool _isDraggingProgress;
         private bool _seekFromTimer;
+        // v3.1.0: MediaElement 没有 IsPlaying 属性,用 _isPlaying 自行跟踪播放状态。
+        private bool _isPlaying;
 
         // v3.0.3 重打(问题1): 无边框窗口最大化用 WM_GETMINMAXINFO(见 NativeWindow)+ 最大化时
         // WindowChrome.ResizeBorderThickness=0(消除内容区内缩),Normal 还原为原值 _resizeBorder。
@@ -143,9 +145,10 @@ namespace MemoryBlackHole.Views
                 // v3.1.0: 用 file:// 转义后的 Uri,避免含 # % & 等字符的路径被当作 fragment/转义/参数解析失败。
                 ConfigureMediaEvents();
                 ResetMediaState();
-                MediaControls.Visibility = Visibility.Visible;
+                MediaControls!.Visibility = Visibility.Visible;
                 MediaPreview.Source = ToMediaUri(path);
                 MediaPreview.Play();
+                _isPlaying = true;
                 _mediaPollTimer.Start();
                 // v3.0.3(任务B): 视频/音频支持双击全屏预览,与图片一致(ESC 还原),切全屏后 BringIntoView 确保可见。
                 MediaPreview.MouseLeftButtonDown -= PreviewElement_MouseLeftButtonDown;
@@ -177,6 +180,7 @@ namespace MemoryBlackHole.Views
             _mediaDurationSeconds = 0;
             _isDraggingProgress = false;
             _seekFromTimer = false;
+            _isPlaying = false;
             ProgressSlider.Value = 0;
             ProgressSlider.Maximum = 1;
             ProgressSlider.IsEnabled = true;
@@ -191,7 +195,7 @@ namespace MemoryBlackHole.Views
             // _isDraggingProgress = 用户按下鼠标(拖动/点轨道);IsMouseCaptureWithin = 缩略圈仍持有鼠标捕获(松手在外部也拦截),
             // 两者任一成立都视为"用户正在操作进度条",暂停轮询避免把进度值拉回去。
             if (_isDraggingProgress || ProgressSlider.IsMouseCaptureWithin) return;
-            if (!MediaPreview.IsPlaying) return;
+            if (!_isPlaying) return;
             double pos = Math.Clamp(MediaPreview.Position.TotalSeconds, 0, _mediaDurationSeconds);
             _seekFromTimer = true;
             ProgressSlider.Value = pos;
@@ -201,9 +205,10 @@ namespace MemoryBlackHole.Views
         private void PlayPause_Click(object sender, RoutedEventArgs e)
         {
             if (!_mediaReady) return;
-            if (MediaPreview.IsPlaying)
+            if (_isPlaying)
             {
                 MediaPreview.Pause();
+                _isPlaying = false;
                 PlayPauseButton.Content = "▶";
             }
             else
@@ -214,6 +219,7 @@ namespace MemoryBlackHole.Views
                     MediaPreview.Position >= MediaPreview.NaturalDuration.TimeSpan)
                     MediaPreview.Position = TimeSpan.Zero;
                 MediaPreview.Play();
+                _isPlaying = true;
                 PlayPauseButton.Content = "⏸";
             }
         }
@@ -268,12 +274,13 @@ namespace MemoryBlackHole.Views
                 ProgressSlider.Maximum = 1;
                 ProgressSlider.IsEnabled = false;
             }
-            PlayPauseButton.Content = MediaPreview.IsPlaying ? "⏸" : "▶";
+            PlayPauseButton.Content = _isPlaying ? "⏸" : "▶";
             TimeText.Text = FormatTime(MediaPreview.Position.TotalSeconds, _mediaDurationSeconds);
         }
 
         private void MediaPreview_MediaEnded(object? sender, RoutedEventArgs e)
         {
+            _isPlaying = false;
             PlayPauseButton.Content = "▶";
             if (_mediaDurationSeconds > 0)
                 TimeText.Text = FormatTime(_mediaDurationSeconds, _mediaDurationSeconds);
@@ -281,6 +288,7 @@ namespace MemoryBlackHole.Views
 
         private void MediaPreview_MediaFailed(object? sender, ExceptionRoutedEventArgs e)
         {
+            _isPlaying = false;
             _mediaReady = false;
             _mediaPollTimer.Stop();
             MediaControls.Visibility = Visibility.Collapsed;
@@ -451,7 +459,7 @@ namespace MemoryBlackHole.Views
             // v3.1.0: 先停止轮询定时器,防止窗口关闭后 Tick 访问已卸载的 UI。
             _mediaPollTimer.Stop();
             // v3.1.0: 先显式停止/关闭媒体,释放其对临时文件的锁定,再删临时文件,避免 %TEMP% 残留。
-            try { if (MediaPreview != null) { MediaPreview.Stop(); MediaPreview.Close(); } } catch (Exception ex) { App.Log("MediaPreview 释放失败: " + ex.Message); }
+            try { if (MediaPreview != null) { MediaPreview.Stop(); MediaPreview.Close(); _isPlaying = false; } } catch (Exception ex) { App.Log("MediaPreview 释放失败: " + ex.Message); }
             // v3.0.9: 再释放图片 FileStream(若存在)
             try { _imageStream?.Dispose(); } catch (Exception ex) { App.Log("_imageStream 释放失败: " + ex.Message); }
             _imageStream = null;

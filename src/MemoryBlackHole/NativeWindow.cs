@@ -77,7 +77,7 @@ namespace MemoryBlackHole
                         // 工作区无效(<=0)时交给系统默认,避免把窗口摆到 0,0 或负坐标处。
                         if (w <= 0 || h <= 0) return IntPtr.Zero;
 
-                        var mmi = (MINMAXINFO)Marshal.PtrToStructure(lParam, typeof(MINMAXINFO));
+                        var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
                         // 坐标是物理像素,直接填入,不要乘除 DPI(PerMonitorV2 下 Windows 才按显示器正确解释)。
                         mmi.ptMaxPosition.X = work.Left;
                         mmi.ptMaxPosition.Y = work.Top;
