@@ -127,6 +127,7 @@ namespace MemoryBlackHole.Models
                     "Image" => "ImageOutline",
                     "Audio" => "MusicNoteOutline",
                     "Video" => "MovieOpenOutline",
+                    "BGM" => "MusicNoteOutline",
                     _ => "TextRecognition"
                 };
             }
@@ -143,6 +144,7 @@ namespace MemoryBlackHole.Models
                     "Image" => "图片",
                     "Audio" => "音频",
                     "Video" => "视频",
+                    "BGM" => "背景音乐",
                     _ => "文本"
                 };
             }

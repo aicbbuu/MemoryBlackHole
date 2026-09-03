@@ -62,6 +62,7 @@ namespace MemoryBlackHole.Views
             bool showTitle = _item.Type != "Text" && _item.Type != "Link";
             TitleText.Visibility = showTitle ? Visibility.Visible : Visibility.Collapsed;
             MetaText.Visibility = showTitle ? Visibility.Visible : Visibility.Collapsed;
+            EditButton.Visibility = _item.Type == "Text" ? Visibility.Visible : Visibility.Collapsed;
             ShowContent();
             // v3.0.9: ESC 退出全屏预览(双击图片后用 ESC 回到普通窗口大小)
             PreviewKeyDown += (_, e) =>
@@ -148,7 +149,7 @@ namespace MemoryBlackHole.Views
                     try { ImagePreview.Source = new BitmapImage(new Uri(path)); ImagePreview.Visibility = Visibility.Visible; } catch { }
                 }
             }
-            else if ((_item.Type == "Video" || _item.Type == "Audio") && path != null)
+            else if ((_item.Type == "Video" || _item.Type == "Audio" || _item.Type == "BGM") && path != null)
             {
                 // v3.1.2: 视频/音频统一走 MediaPlayer(见类注释)。视频再用 VideoDrawing 渲染到 Rectangle;
                 // 音频无画面,只开声音(VideoSurface 保持 Collapsed)。

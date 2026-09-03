@@ -786,7 +786,7 @@ Loaded += (_, _) =>
             _musicQueueBuilt = true;
             try
             {
-                _musicItems = _service?.Search("", type: "Audio") ?? new List<MemoryItem>();
+                _musicItems = _service?.Search("", type: "BGM") ?? new List<MemoryItem>();
             }
             catch (Exception ex)
             {

@@ -110,6 +110,17 @@ namespace MemoryBlackHole.Views
                 ContentBox.ToolTip = "输入链接地址（如 https://github.com/）";
             else
                 ContentBox.ToolTip = "输入文本内容";
+            // v6.6.6: BGM(软件背景音乐)选中时显示橙色提示,并隐藏通用文件说明;其它类型相反
+            bool isBgm = SelectedType == "BGM";
+            if (BgmHint != null)
+                BgmHint.Visibility = isBgm ? Visibility.Visible : Visibility.Collapsed;
+            if (GenericFileHint != null)
+                GenericFileHint.Visibility = isBgm ? Visibility.Collapsed : Visibility.Visible;
+            // BGM 不允许自定义标签:隐藏标签区提示文字与自定义标签输入框,只保留固定类型词
+            if (TagHintText != null)
+                TagHintText.Visibility = isBgm ? Visibility.Collapsed : Visibility.Visible;
+            if (TagsBox != null)
+                TagsBox.Visibility = isBgm ? Visibility.Collapsed : Visibility.Visible;
             // v3.1.0: 固定类型词(_fixedTag)随类型切换,左侧 FixedTagLabel 实时显示
             // TagsBox 不再被清空/覆盖 — 用户之前追加的标签全部保留
             _fixedTag = SelectedType switch
@@ -120,6 +131,7 @@ namespace MemoryBlackHole.Views
                 "Audio" => "音频",
                 "File"  => "文件",
                 "Link"  => "链接",
+                "BGM"   => "背景音乐",
                 _       => "",
             };
             if (FixedTagLabel != null) FixedTagLabel.Text = _fixedTag;
@@ -136,6 +148,7 @@ namespace MemoryBlackHole.Views
                     "Image" => "图片文件|*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp|所有文件|*.*",
                     "Video" => "视频文件|*.mp4;*.mkv;*.avi;*.mov;*.webm|所有文件|*.*",
                     "Audio" => "音频文件|*.mp3;*.wav;*.flac;*.m4a;*.ogg|所有文件|*.*",
+                    "BGM"   => "音频文件|*.mp3;*.wav;*.flac;*.m4a;*.ogg|所有文件|*.*",
                     _ => "所有文件|*.*"
                 }
             };
@@ -203,7 +216,9 @@ namespace MemoryBlackHole.Views
             // 使用第一个文件的原始文件名作为对话框标题
             ItemTitle = OriginalFileNames.Count > 0 ? OriginalFileNames[0] : null;
             // v3.1.0: Tags = 固定类型词 + (用户词非空?"," + 用户词:"")
-            var userTags = string.IsNullOrWhiteSpace(TagsBox.Text) ? "" : TagsBox.Text.Trim();
+            // v6.6.6: BGM 不允许自定义标签,直接取固定类型词"背景音乐"
+            var userTags = SelectedType == "BGM" ? "" :
+                           string.IsNullOrWhiteSpace(TagsBox.Text) ? "" : TagsBox.Text.Trim();
             Tags = string.IsNullOrEmpty(_fixedTag) ? userTags :
                    string.IsNullOrEmpty(userTags) ? _fixedTag :
                    _fixedTag + "," + userTags;

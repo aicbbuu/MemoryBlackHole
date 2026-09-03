@@ -265,7 +265,7 @@
                 </Grid.Resources>
                 <Button x:Name="MusicToggle" Style="{StaticResource CircleIconButton}" Click="MusicToggle_Click"
                         ToolTip="背景音乐">
-                    <TextBlock Text="🎵" FontSize="16" Foreground="#A5B0C8"/>
+                    <TextBlock Text="🎵" FontSize="16" Foreground="#E67E22"/>
                 </Button>
                 <Border x:Name="MusicPanel" Visibility="Collapsed" Background="#B0171D2A" CornerRadius="12"
                         Padding="12" Width="300" Cursor="Arrow">
