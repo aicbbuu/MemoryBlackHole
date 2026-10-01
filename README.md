@@ -1,5 +1,13 @@
 # 记忆黑洞 🕳️
 
+[![Build](https://github.com/aicbbuu/MemoryBlackHole/actions/workflows/windows-build.yml/badge.svg)](https://github.com/aicbbuu/MemoryBlackHole/actions/workflows/windows-build.yml)
+[![Release](https://github.com/aicbbuu/MemoryBlackHole/actions/workflows/windows-build.yml/badge.svg)](https://github.com/aicbbuu/MemoryBlackHole/actions/workflows/windows-build.yml)
+[![Release 版本](https://img.shields.io/github/v/release/aicbbuu/MemoryBlackHole?label=Release&color=blue)](https://github.com/aicbbuu/MemoryBlackHole/releases)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![平台](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-lightgrey.svg)](https://github.com/aicbbuu/MemoryBlackHole/releases)
+
+![图标](docs/icon256.png)
+
 纯本地「万物收纳盒」——随手记•随时找
 
 你有没有这样的经历：
@@ -10,6 +18,8 @@
 别担心——交给黑洞保管就好。
 
 ---
+
+![主界面与记忆空间来回](docs/anim.gif)
 
 ## 📦 我能用它做什么？
 
