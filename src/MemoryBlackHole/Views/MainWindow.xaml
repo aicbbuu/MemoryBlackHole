@@ -188,15 +188,13 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
-                <Grid Width="34" Height="34">
-                    <Ellipse Fill="{StaticResource AccentGradient}"/>
-                    <Ellipse Width="22" Height="22" Fill="#151820" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <Ellipse Width="9" Height="9" Fill="#FFE7A6" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <Ellipse Width="29" Height="8" Stroke="#FFF0C2" StrokeThickness="1.4" Opacity="0.85"
-                             HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                        <Ellipse.RenderTransform><RotateTransform Angle="-18"/></Ellipse.RenderTransform>
-                    </Ellipse>
-                </Grid>
+                <!-- 用icon_48.png 而不是矢量画：矢量那份的<RotateTransform
+                     Angle="-18"/> 是逆时针，和 EXE 图标正好相反——两套独立
+                     实现导致的偏差。现在界面、EXE、安装包、快捷方式、任务栏
+                     全部来自 tools/make_icon.py 的同一份产物，方向必然一致。 -->
+                <Image Source="pack://application:,,,/Assets/icon_48.png"
+                       Width="34" Height="34"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
                 <TextBlock Text="记忆黑洞" FontSize="15" FontWeight="SemiBold"
                            Foreground="#F5F7FF" Margin="10,0,0,0" VerticalAlignment="Center"/>
             </StackPanel>

@@ -8,10 +8,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>MemoryBlackHole</RootNamespace>
     <AssemblyName>MemoryBlackHole</AssemblyName>
-    <Version>3.2.1</Version>
-    <AssemblyVersion>3.2.1.0</AssemblyVersion>
-    <FileVersion>3.2.1.0</FileVersion>
-    <InformationalVersion>3.2.1</InformationalVersion>
+    <Version>3.2.6</Version>
+    <AssemblyVersion>3.2.6.0</AssemblyVersion>
+    <FileVersion>3.2.6.0</FileVersion>
+    <InformationalVersion>3.2.6</InformationalVersion>
     <Authors>vicz</Authors>
     <Company>vicz</Company>
     <Product>记忆黑洞</Product>
@@ -29,6 +29,21 @@
   <ItemGroup>
     <!-- 本地数据库：SQLite + FTS5 全文索引 -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+  </ItemGroup>
+
+  <!-- 图标资源。WPF SDK 对 **/*.png 有默认规则，但规则随 SDK 版本变化，
+       而且 icon_*.png 与 AppIcon.ico 混在同一目录时行为不直观。显式声明
+       为 Resource，XAML 里用 pack://application:,,,/Assets/icon_48.png
+       引用，编译期就能确认路径对不对——靠默认规则的话路径写错要等到运行时
+       才炸成一片空白。 -->
+  <ItemGroup>
+    <Resource Include="Assets\icon_16.png" />
+    <Resource Include="Assets\icon_24.png" />
+    <Resource Include="Assets\icon_32.png" />
+    <Resource Include="Assets\icon_48.png" />
+    <Resource Include="Assets\icon_64.png" />
+    <Resource Include="Assets\icon_128.png" />
+    <Resource Include="Assets\icon_256.png" />
   </ItemGroup>
 
 </Project>
