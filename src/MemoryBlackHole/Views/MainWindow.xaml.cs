@@ -1025,15 +1025,22 @@ Loaded += (_, _) =>
             private const double EventW    = 180 * SizeScale;
             private const double EventH    = 180 * SizeScale;
             // 中心光晕(可被 Flash 临时染色)
-            private const double HaloW     = 460 * SizeScale;
-            private const double HaloH     = 460 * SizeScale;
+            // v3.2.7(清晰度):Halo 460->330、Disk 600->470。此前光晕铺满窗口宽度的
+            // 四分之三，与 225px 的视界久久不能对视，锐利与不锐利并存，视觉上整体
+            // 发糊。收小后黑洞本身成为主体，吸积盘外缘也不再顶到窗口边界。
+            private const double HaloW     = 330 * SizeScale;
+            private const double HaloH     = 330 * SizeScale;
             // 单层柔光吸积盘(无旋转)
-            private const double DiskW     = 600 * SizeScale;
-            private const double DiskH     = 600 * SizeScale;
+            private const double DiskW     = 470 * SizeScale;
+            private const double DiskH     = 470 * SizeScale;
 
             // 吸积粒子轨道半径
-            private const double OrbitRInner = 110 * SizeScale;
-            private const double OrbitROuter = 360 * SizeScale;
+            // v3.2.7(清晰度):OrbitRInner 110->185、OrbitROuter 360->300。原先
+            // 内沿 138px 落在225px 的纯黑视界里，粒子会漂在黑洞正中；外沿450px
+            // 又超出收小后的 412px 光晕。收进[185,300] 后粒子正好分布在视界之外、
+            // 光晕之内，不再扎进纯黑区，也不再漂到光晕外显得脱节。
+            private const double OrbitRInner = 185 * SizeScale;
+            private const double OrbitROuter = 300 * SizeScale;
 
             // 吸积粒子数量
             private const int OrbitPoolSize = 100;
@@ -1139,10 +1146,15 @@ Loaded += (_, _) =>
                     _orbitAngle[i]     = rng.NextDouble() * TwoPi;
                     // 启动分布:在 [OrbitRInner, OrbitROuter] 内随机
                     _orbitRadius[i]    = OrbitRInner + rng.NextDouble() * (OrbitROuter - OrbitRInner);
-                    // 基础角速度:0.18~0.73
+                    // 基础角速度：0.18~0.73
                     _orbitSpeed[i]     = 0.18 + rng.NextDouble() * 0.55;
-                    _orbitSize[i]      = 1.6 + rng.NextDouble() * 2.6;
-                    _orbitBaseAlpha[i] = 0.40 + rng.NextDouble() * 0.45;
+                    // v3.2.7(清晰度)：1.6~4.2 -> 2.8~6.4。1.6px 的圆在 WPF 里
+                    // 抗锯齿后基本是个半透明色点，100 颗这样的点散在 575px 范围里
+                    // 看起来是噪点而不是珠状粒子。放大到3px 以上才画得出圆的边缘。
+                    _orbitSize[i]      = 2.8 + rng.NextDouble() * 3.6;
+                    // 0.40~0.85 -> 0.65~1.0。半透明点叠在柔光上会被背景吃掉，
+                    // 提高下限让粒子实心可见，上限保持 1.0 避免过曝。
+                    _orbitBaseAlpha[i] = 0.65 + rng.NextDouble() * 0.35;
                     // 螺旋收缩率:6~14 px/s,产生层次感
                     _orbitShrink[i]    = 6.0 + rng.NextDouble() * 8.0;
                     // 离视界近的偏白热,远的偏冷
@@ -1172,9 +1184,31 @@ Loaded += (_, _) =>
                 _haloFlashing = true;
             }
 
+            /// <summary>径向柔光笔刷：5 个色标，中心段保持实色。
+            ///
+            /// v3.2.7(清晰度)：此前用 RadialGradientBrush(inner, transparent) 只生成
+            /// 2 个色标，中间整圈（半径 20%~70%）都是半透明橙色在渐变——半透明叠在
+            /// 深色背景上就是「发灰发糊」，这才是糊的根因，不是缺 BlurEffect 滤镜。
+            /// 改成 5 色标后，中心 20% 实色不衰减，边界用三段加速收尾，能量集中
+            /// 在视界附近，不再是一大片均匀的低对比度色块。
+            /// </summary>
             private static Brush MakeRadialGlow(Color inner, Color outer)
             {
-                var brush = new RadialGradientBrush(inner, outer);
+                var brush = new RadialGradientBrush();
+                Color Pick(byte t)
+                {
+                    // 沿 inner -> outer 线性插值，保留各自 alpha
+                    return Color.FromArgb(
+                        (byte)(inner.A + (outer.A - inner.A) * t / 255.0),
+                        (byte)(inner.R + (outer.R - inner.R) * t / 255.0),
+                        (byte)(inner.G + (outer.G - inner.G) * t / 255.0),
+                        (byte)(inner.B + (outer.B - inner.B) * t / 255.0));
+                }
+                brush.GradientStops.Add(new GradientStop(inner,      0.00));
+                brush.GradientStops.Add(new GradientStop(Pick(200), 0.20));
+                brush.GradientStops.Add(new GradientStop(Pick(128), 0.44));
+                brush.GradientStops.Add(new GradientStop(Pick(56),   0.72));
+                brush.GradientStops.Add(new GradientStop(outer,      1.00));
                 brush.Freeze();
                 return brush;
             }
